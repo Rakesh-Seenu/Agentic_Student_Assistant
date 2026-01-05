@@ -1,3 +1,7 @@
+"""
+Streamlit application for Agentic Student Assistant.
+Updated to use new architecture with caching, logging, and enhanced UI.
+"""
 import os
 import json
 import time
@@ -9,19 +13,23 @@ from langchain_core.documents import Document
 # Utilities
 from utils.parse_pdf import parse_single_pdf
 from utils.chunker import chunk_text
+from utils.logging_manager import LoggingManager
+from utils.cache import get_cache
 from langgraph_workflow.main_graph import app
-from utils.sheets_logger import log_to_gsheet
 
 load_dotenv()
 
 # ---------------- UI Setup ----------------
-st.set_page_config(page_title="SRH Assistant", layout="wide")
+st.set_page_config(page_title="SRH Assistant", layout="wide", page_icon="🎓")
 st.title("🎓 AI-Powered University Assistant")
+st.caption("Powered by GPT-4 with LLM-based routing and multi-agent orchestration")
 
 # ---------------- Sidebar ----------------
-st.sidebar.header("Curriculum Source")
+st.sidebar.header("⚙️ Configuration")
+
+# Curriculum source
 curriculum_mode = st.sidebar.radio(
-    "Select Curriculum Type:",
+    "Curriculum Source:",
     ["SRH Curriculum", "Upload Your Curriculum PDF"]
 )
 
@@ -42,74 +50,123 @@ if curriculum_mode == "Upload Your Curriculum PDF":
 
 curriculum_mode_flag = "uploaded" if uploaded_docs else "srh"
 
+# Cache settings
+st.sidebar.divider()
+st.sidebar.subheader("🚀 Performance")
+use_cache = st.sidebar.checkbox("Enable Response Caching", value=True)
+
+if use_cache:
+    cache = get_cache()
+    cache_stats = cache.get_stats()
+    st.sidebar.metric("Cache Hit Rate", f"{cache_stats['hit_rate']:.1%}")
+    st.sidebar.metric("Cached Responses", f"{cache_stats['size']}/{cache_stats['max_size']}")
+    
+    if st.sidebar.button("Clear Cache"):
+        cache.clear()
+        st.sidebar.success("Cache cleared!")
+        st.rerun()
+
+# ---------------- Initialize Logger ----------------
+if "logger" not in st.session_state:
+    st.session_state.logger = LoggingManager(
+        enable_file=True,
+        enable_gsheets=True,  # Enable if you have Google Sheets configured
+        enable_console=False
+    )
+
 # ---------------- Chat Interface ----------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-if "logs" not in st.session_state:
-    st.session_state.logs = ""
-
-user_query = st.chat_input("Ask a question about courses, jobs, skills, or books...")
-
-if user_query:
-    st.session_state.chat_history.append(("user", user_query))
-
-    start_time = time.time()
-    with st.spinner("🤖 Thinking..."):
-        result = app.invoke({
-            "query": user_query,
-            "curriculum_mode": curriculum_mode_flag,
-            "uploaded_docs": uploaded_docs
-        })
-    end_time = time.time()
-    latency = end_time - start_time
-
-    agent_used = result.get("agent", "unknown")
-    is_fallback = agent_used == "fallback"
-    timestamp = datetime.datetime.now().isoformat()
-    answer = result.get("result", "")
-
-    # Build log entry string
-    log_entry = "\n" + "=" * 60 + "\n"
-    log_entry += f"🕒 Timestamp: {timestamp}\n"
-    log_entry += f"❓ Query: {user_query}\n"
-    log_entry += f"📂 Curriculum Mode: {curriculum_mode_flag}\n"
-    log_entry += f"📌 Routed Agent: {agent_used}\n"
-    log_entry += f"⏱️ Latency: {latency:.2f} seconds\n"
-    log_entry += f"🛡️ Fallback Used: {'Yes' if is_fallback else 'No'}\n"
-    log_entry += f"📘 Final Answer:\n{answer}\n"
-    log_entry += "=" * 60 + "\n"
-
-    # 1️⃣ Save to session state
-    st.session_state.logs += log_entry
-
-    # 2️⃣ Save to local file (in dev or cloud)
-    try:
-        os.makedirs("logs", exist_ok=True)
-        with open("logs/workflow_logs.txt", "a", encoding="utf-8") as f:
-            f.write(log_entry)
-    except:
-        pass
-
-    # 3️⃣ Save to Google Sheets
-    try:
-        log_to_gsheet(
-            timestamp=timestamp,
-            query=user_query,
-            agent=agent_used,
-            curriculum_mode=curriculum_mode_flag,
-            latency=round(latency, 2),
-            is_fallback=is_fallback,
-            result=answer
-        )
-    except Exception as e:
-        st.warning(f"⚠️ Google Sheets logging failed: {e}")
-
-    # Store response
-    st.session_state.chat_history.append(("assistant", answer))
-    st.session_state.chat_history.append(("system", f"📌 Routed to: `{agent_used}` agent"))
-
-# ---------------- Render Chat ----------------
+# Display chat history
 for role, message in st.session_state.chat_history:
     with st.chat_message(role):
         st.markdown(message)
+
+# Chat input
+user_query = st.chat_input("Ask about courses, jobs, skills, or books...")
+
+if user_query:
+    # Add user message to chat
+    st.session_state.chat_history.append(("user", user_query))
+    with st.chat_message("user"):
+        st.markdown(user_query)
+    
+    # Check cache first if enabled
+    cached_result = None
+    if use_cache:
+        cache = get_cache()
+        cached_result = cache.get(user_query)
+        if cached_result:
+            st.info("📦 Retrieved from cache")
+    
+    if cached_result:
+        # Use cached result
+        answer = cached_result
+        agent_used = "cached"
+        confidence = None
+        reasoning = "Response retrieved from cache"
+        latency = 0.0
+    else:
+        # Process query
+        start_time = time.time()
+        
+        with st.spinner("🤖 Thinking..."):
+            result = app.invoke({
+                "query": user_query,
+                "curriculum_mode": curriculum_mode_flag,
+                "uploaded_docs": uploaded_docs
+            })
+        
+        end_time = time.time()
+        latency = end_time - start_time
+        
+        agent_used = result.get("agent", "unknown")
+        confidence = result.get("confidence")
+        reasoning = result.get("reasoning", "")
+        answer = result.get("result", "")
+        
+        # Cache the result if enabled
+        if use_cache:
+            cache.set(user_query, answer, agent=agent_used)
+    
+    # Display assistant response
+    with st.chat_message("assistant"):
+        st.markdown(answer)
+        
+        # Show routing metadata in expander
+        with st.expander("🔍 Routing Details"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Agent", agent_used.title())
+                if confidence is not None:
+                    st.metric("Confidence", f"{confidence:.2%}")
+            with col2:
+                st.metric("Latency", f"{latency:.2f}s")
+                if reasoning:
+                    st.caption(f"**Reasoning:** {reasoning}")
+    
+    # Add assistant response to chat history
+    st.session_state.chat_history.append(("assistant", answer))
+    
+    # Log interaction
+    is_fallback = agent_used == "fallback"
+    st.session_state.logger.log_interaction(
+        query=user_query,
+        agent=agent_used,
+        result=answer,
+        latency=latency,
+        is_fallback=is_fallback,
+        curriculum_mode=curriculum_mode_flag,
+        confidence=confidence,
+        reasoning=reasoning
+    )
+
+# ---------------- Sidebar Stats ----------------
+st.sidebar.divider()
+st.sidebar.subheader("📊 Session Stats")
+st.sidebar.metric("Questions Asked", len([m for m in st.session_state.chat_history if m[0] == "user"]))
+
+if use_cache:
+    st.sidebar.metric("Cache Hits", cache_stats['hits'])
+    st.sidebar.metric("Cache Misses", cache_stats['misses'])

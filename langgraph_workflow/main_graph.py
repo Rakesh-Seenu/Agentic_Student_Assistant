@@ -21,7 +21,7 @@ from agents.fallback_agent import FallbackAgent
 
 load_dotenv()
 
-from typing import TypedDict, List, Optional
+from typing import TypedDict, List, Optional, Dict, Any
 from langchain_core.documents import Document
 
 class GraphState(TypedDict):
@@ -30,35 +30,49 @@ class GraphState(TypedDict):
     result: str
     curriculum_mode: Optional[str]
     uploaded_docs: Optional[List[Document]]
+    # Enhanced state for LLM router
+    confidence: Optional[float]
+    reasoning: Optional[str]
+    metadata: Optional[Dict[str, Any]]
 
-# ------------ ROUTING -------------
+# ------------ ROUTING (LLM-BASED) -------------
+from agents.router_agent import route_query
+
 def route_agent(state: GraphState):
-    query = state["query"].lower()
-
-    if any(word in query for word in ["course", "module", "subject"]):
-        agent = "curriculum"
-    elif any(word in query for word in ["job", "hiring", "career"]):
-        agent = "job_market"
-    elif any(word in query for word in ["match", "skills", "gap"]):
-        agent = "skill_mapping"
-    elif any(word in query for word in ["book", "reference", "resource"]):
-        agent = "books"
-    else:
-        agent = "fallback"
-
-    print(f"🧭 Routing to: {agent} agent")
+    """
+    Route query using LLM-based semantic routing.
+    Replaces keyword-based routing with GPT-powered understanding.
+    """
+    query = state["query"]
+    
+    # Use LLM router for intelligent routing with orchestration detection
+    decision = route_query(query, enable_orchestration=True)
+    
+    print(f"🧭 Routing to: {decision.agent} agent")
+    print(f"🎯 Confidence: {decision.confidence:.2f}")
+    print(f"💭 Reasoning: {decision.reasoning}")
+    
     return {
-        "agent": agent,
+        "agent": decision.agent,
         "query": state["query"],
         "curriculum_mode": state.get("curriculum_mode", "srh"),
-        "uploaded_docs": state.get("uploaded_docs")
+        "uploaded_docs": state.get("uploaded_docs"),
+        "confidence": decision.confidence,
+        "reasoning": decision.reasoning,
+        "metadata": {
+            "router_version": "llm_v1",
+            "model": "gpt-4"
+        }
     }
 
 # ------------ NODE DEFINITIONS -------------
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
+# from langchain_openai import OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI
+from langchain.embeddings import OpenAIEmbeddings
+
 from langchain.chains import ConversationalRetrievalChain
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 
 @traceable(name="curriculum_node")
@@ -122,6 +136,13 @@ def fallback_node(state: GraphState):
     result = fallback.run(state["query"])
     return {"result": result, "agent": "fallback"}
 
+@traceable(name="orchestrator_node")
+def orchestrator_node(state: GraphState):
+    from agents.orchestrator_agent import OrchestratorAgent
+    orchestrator = OrchestratorAgent()
+    result = orchestrator.process(state["query"])
+    return {"result": result, "agent": "orchestrator"}
+
 # ------------ GRAPH SETUP -------------
 graph = StateGraph(GraphState)
 
@@ -131,6 +152,7 @@ graph.add_node("job_market", RunnableLambda(job_market_node))
 graph.add_node("skill_mapping", RunnableLambda(skill_mapping_node))
 graph.add_node("books", RunnableLambda(books_node))
 graph.add_node("fallback", RunnableLambda(fallback_node))
+graph.add_node("orchestrator", RunnableLambda(orchestrator_node))  # NEW
 
 graph.add_conditional_edges(
     "router",
@@ -140,6 +162,7 @@ graph.add_conditional_edges(
         "job_market": "job_market",
         "skill_mapping": "skill_mapping",
         "books": "books",
+        "orchestrator": "orchestrator",  # NEW
         "fallback": "fallback",
     },
 )
@@ -148,12 +171,14 @@ graph.add_edge("curriculum", END)
 graph.add_edge("job_market", END)
 graph.add_edge("skill_mapping", END)
 graph.add_edge("books", END)
+graph.add_edge("orchestrator", END)  # NEW
 graph.add_edge("fallback", END)
 
 graph.set_entry_point("router")
 app = graph.compile()
 
-def log_query(query: str, agent: str, result: str, latency: float = None, is_fallback: bool = False, curriculum_mode: str = "srh"):
+def log_query(query: str, agent: str, result: str, latency: float = None, is_fallback: bool = False, 
+              curriculum_mode: str = "srh", confidence: float = None, reasoning: str = ""):
     os.makedirs("logs", exist_ok=True)
     log_path = "logs/workflow_logs.txt"
     with open(log_path, "a", encoding="utf-8") as f:
@@ -162,6 +187,10 @@ def log_query(query: str, agent: str, result: str, latency: float = None, is_fal
         f.write(f"❓ Query: {query}\n")
         f.write(f"📂 Curriculum Mode: {curriculum_mode}\n")
         f.write(f"📌 Routed Agent: {agent}\n")
+        if confidence is not None:
+            f.write(f"🎯 Router Confidence: {confidence:.2f}\n")
+        if reasoning:
+            f.write(f"💭 Router Reasoning: {reasoning}\n")
         if latency is not None:
             f.write(f"⏱️ Latency: {latency:.2f} seconds\n")
         f.write(f"🛡️ Fallback Used: {'Yes' if is_fallback else 'No'}\n")
@@ -180,6 +209,15 @@ if __name__ == "__main__":
     })
 
     print(f"\n✅ Final Answer from {final_state['agent']} Agent:\n{final_state['result']}")
-    log_query(query, final_state["agent"], final_state["result"], curriculum_mode="srh")
+    
+    # Log with router metadata
+    log_query(
+        query=query,
+        agent=final_state["agent"],
+        result=final_state["result"],
+        curriculum_mode="srh",
+        confidence=final_state.get("confidence"),
+        reasoning=final_state.get("reasoning", "")
+    )
 
 

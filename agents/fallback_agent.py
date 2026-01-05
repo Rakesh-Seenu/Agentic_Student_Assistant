@@ -1,47 +1,62 @@
+"""
+Fallback agent for handling general queries outside specialist domains.
+Refactored to inherit from BaseAgent and use config-based architecture.
+"""
 import os
-import json
-from datetime import datetime
+import sys
 from dotenv import load_dotenv
-from langchain.chat_models import ChatOpenAI
 
-# Load environment variables
+# Add parent directory to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from agents.base_agent import BaseAgent
+from utils.config_loader import get_config, get_prompt
+
 load_dotenv()
 
-class FallbackAgent:
+
+class FallbackAgent(BaseAgent):
+    """
+    Fallback agent for general queries that don't fit specialist agents.
+    Uses GPT with general knowledge to provide helpful responses.
+    """
+    
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4", temperature=0.3)
-
-    def run(self, query: str) -> str:
-        fallback_prompt = f"""
-You are a helpful university assistant chatbot. A user has asked a question that doesn't match any known category like curriculum, jobs, skill matching, or books.
-
-Try your best to either:
-- Answer the query using general knowledge, OR
-- Politely let them know the system can't help with that yet.
-
-Query:
-\"\"\"{query}\"\"\"
-"""
-        response = self.llm.invoke(fallback_prompt)
-
-        # Log the query to a file for future analysis
-        log_entry = {
-            "query": query,
-            "timestamp": datetime.now().isoformat()
-        }
-        os.makedirs("logs", exist_ok=True)
-        with open("logs/unhandled_queries.json", "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry) + "\n")
-
+        """Initialize fallback agent with configuration."""
+        config = get_config()
+        super().__init__(config, agent_name="fallback")
+        self.system_prompt = get_prompt("fallback_general")
+    
+    def process(self, query: str, **kwargs) -> str:
+        """
+        Process a general query using GPT.
+        
+        Args:
+            query: User query
+            **kwargs: Additional parameters (unused)
+            
+        Returns:
+str: Agent response
+        """
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": query}
+        ]
+        
+        response = self.llm.invoke(messages)
         return response.content
+    
+    def run(self, query: str) -> str:
+        """Legacy method for backward compatibility."""
+        return self.process(query)
 
-# -----------------------
-# Simple CLI to test fallback agent
-# -----------------------
+
 if __name__ == "__main__":
-    print("💬 Fallback Agent CLI")
-    user_query = input("\n🔎 Enter your query: ")
     agent = FallbackAgent()
-    result = agent.run(user_query)
-    print("\n✅ Final Answer:\n")
-    print(result)
+    
+    test_query = "What is the capital of France?"
+    result = agent.process(test_query)
+    
+    print(f"\n🤖 FallbackAgent Test")
+    print(f"Query: {test_query}")
+    print(f"Response: {result}")
