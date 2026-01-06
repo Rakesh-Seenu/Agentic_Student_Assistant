@@ -30,6 +30,11 @@ caching:
   enabled: true
   ttl_seconds: 3600
   max_size: 1000
+  redis:
+    host: ${oc.env:REDIS_HOST, "localhost"}
+    port: ${oc.env:REDIS_PORT, 6379}
+    db: ${oc.env:REDIS_DB, 0}
+    password: ${oc.env:REDIS_PASSWORD, null}
 
 observability:
   langsmith:

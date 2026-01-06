@@ -84,7 +84,7 @@ class LLMFactory:
         }
         
         requested_model = model_config.name
-        groq_model = model_mapping.get(requested_model, "llama-3.1-8b-instant")
+        groq_model = model_mapping.get(requested_model, "llama-3.3-70b-versatile")
         
         print(f"💡 Mapping {requested_model} → Groq {groq_model}")
         

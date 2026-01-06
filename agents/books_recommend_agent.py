@@ -38,10 +38,10 @@ class BooksRecommendAgent(BaseAgent):
         # print(f"📚 Searching for books: {query}")
         
         # 1. Search Open Library (Primary - Academic)
-        ol_results = self.ol_search.search(query, limit=5)
+        ol_results = self.ol_search.search(query, limit=3)
         
         # 2. Search Google Books (Secondary - Enrichment)
-        gb_results = self.gb_search.search(query, limit=5)
+        gb_results = self.gb_search.search(query, limit=3)
         
         # 3. Merge and Normalize
         merged_books = normalize_books(ol_results, gb_results)

@@ -22,7 +22,7 @@ from utils.llm_factory import LLMFactory
 class RouteDecision(BaseModel):
     """Structured output for routing decisions."""
     
-    agent: Literal["curriculum", "job_market", "skill_mapping", "books", "papers", "orchestrator", "fallback"] = Field(
+    agent: Literal["job_market", "books", "papers", "orchestrator", "fallback"] = Field(
         description="The agent that should handle this query"
     )
     confidence: float = Field(
@@ -131,18 +131,18 @@ class RouterAgent:
         # Check if query mentions multiple domains (heuristic for orchestration)
         query_lower = query.lower()
         domains = 0
-        if any(word in query_lower for word in ["course", "curriculum", "module", "subject"]):
+        if any(word in query_lower for word in ["job", "career", "hiring", "work"]):
             domains += 1
-        if any(word in query_lower for word in ["job", "career", "hiring"]):
+        if any(word in query_lower for word in ["paper", "article", "citation", "research", "study"]):
             domains += 1
-        if any(word in query_lower for word in ["skill", "gap", "match"]):
+        if any(word in query_lower for word in ["book", "reading", "textbook", "resource", "bibtex"]):
             domains += 1
         
         # If multiple domains detected, consider orchestrator
         if domains >= 2:
-            print(f"🎭 Multiple domains detected ({domains}), considering orchestrator")
+            print(f"🎭 Multiple domains detected ({domains}), routing to orchestrator")
             decision.agent = "orchestrator"
-            decision.reasoning = f"Complex query spanning {domains} domains. " + decision.reasoning
+            decision.reasoning = f"Complex query spanning {domains} domains ({query}). " + decision.reasoning
         
         return decision
 
@@ -184,12 +184,10 @@ if __name__ == "__main__":
     
     # Test queries
     test_queries = [
-        "What courses cover machine learning?",
         "Find AI jobs in Berlin",
-        "What skills do I need for data science?",
         "Recommend books on Python programming",
         "What's the weather today?",
-        "What courses should I take to get an AI job?",  # Multi-domain
+        "Find papers and books to learn about Transformers for my next job",  # Multi-domain
     ]
     
     for query in test_queries:
@@ -199,3 +197,4 @@ if __name__ == "__main__":
         print(f"   📊 Confidence: {decision.confidence:.2f}")
         print(f"   💭 Reasoning: {decision.reasoning}")
         print("-" * 70)
+

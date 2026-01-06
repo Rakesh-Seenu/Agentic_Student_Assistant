@@ -81,9 +81,9 @@ class PaperRecommendAgent(BaseAgent):
         search_query = self._refine_query(query)
         
         # 3. Search (Semantic Scholar + CORE)
-        ss_results = self.ss_search.search(search_query, limit=5)
-        core_results = self.core_search.search(search_query, limit=5)
-        arxiv_results = self.arxiv_search.search(search_query, limit=5)
+        ss_results = self.ss_search.search(search_query, limit=3)
+        core_results = self.core_search.search(search_query, limit=3)
+        arxiv_results = self.arxiv_search.search(search_query, limit=3)
         
         # Track errors but don't return yet
         has_rate_limit = any(isinstance(res, dict) and res.get("error") == "rate_limit" for res in ss_results + core_results)
@@ -94,7 +94,7 @@ class PaperRecommendAgent(BaseAgent):
         # 4. Fallback search (OpenReview)
         if not merged_papers:
             print("🕒 Trying OpenReview as fallback...")
-            or_results = self.openreview_search.search(search_query, limit=5)
+            or_results = self.openreview_search.search(search_query, limit=3)
             merged_papers = normalize_papers(merged_papers, or_results)
         
         # 4. Keyword Filtering (Strict Relevance Check)

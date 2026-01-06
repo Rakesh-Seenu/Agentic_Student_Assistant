@@ -1,6 +1,5 @@
 """
-Job market agent for searching and summarizing job listings.
-Refactored to inherit from BaseAgent and use config-based architecture.
+Job market agent for searching jobs.
 """
 import os
 import sys
@@ -21,7 +20,6 @@ load_dotenv()
 class JobMarketAgent(BaseAgent):
     """
     Agent for searching and analyzing job market data.
-    Uses web search to find job listings and GPT to summarize.
     """
     
     def __init__(self):
@@ -155,7 +153,7 @@ class JobMarketAgent(BaseAgent):
         
         # Extract structured job data
         job_listings = []
-        for job in jobs[:5]:  # Get top 5 jobs
+        for job in jobs[:3]:  # Get top 3 jobs to save tokens
             # Get primary apply link
             apply_options = job.get("apply_options", [])
             apply_link = apply_options[0].get("link") if apply_options else job.get("share_link", "No link")

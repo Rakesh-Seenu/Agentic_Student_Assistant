@@ -27,37 +27,14 @@ st.caption("Powered by GPT-4 with LLM-based routing and multi-agent orchestratio
 # ---------------- Sidebar ----------------
 st.sidebar.header("⚙️ Configuration")
 
-# Curriculum source
-curriculum_mode = st.sidebar.radio(
-    "Curriculum Source:",
-    ["SRH Curriculum", "Upload Your Curriculum PDF"]
-)
-
-uploaded_docs = None
-
-if curriculum_mode == "Upload Your Curriculum PDF":
-    uploaded_file = st.sidebar.file_uploader("Upload Curriculum PDF", type=["pdf"])
-    if uploaded_file:
-        with open("temp_uploaded.pdf", "wb") as f:
-            f.write(uploaded_file.read())
-        parsed = parse_single_pdf("temp_uploaded.pdf")
-        chunks = chunk_text(parsed[0]["content"], source=parsed[0]["filename"])
-        uploaded_docs = [
-            Document(page_content=chunk["content"], metadata=chunk["metadata"])
-            for chunk in chunks
-        ]
-        st.sidebar.success(f"✅ Uploaded {parsed[0]['filename']} with {len(chunks)} chunks.")
-
-curriculum_mode_flag = "uploaded" if uploaded_docs else "srh"
-
 # Cache settings
-st.sidebar.divider()
 st.sidebar.subheader("🚀 Performance")
 use_cache = st.sidebar.checkbox("Enable Response Caching", value=True)
 
 if use_cache:
     cache = get_cache()
     cache_stats = cache.get_stats()
+    st.sidebar.metric("Cache Type", cache_stats.get('type', 'unknown').title())
     st.sidebar.metric("Cache Hit Rate", f"{cache_stats['hit_rate']:.1%}")
     st.sidebar.metric("Cached Responses", f"{cache_stats['size']}/{cache_stats['max_size']}")
     
@@ -84,7 +61,8 @@ for role, message in st.session_state.chat_history:
         st.markdown(message)
 
 # Chat input
-user_query = st.chat_input("Ask about courses, jobs, skills, or books...")
+st.sidebar.divider()
+user_query = st.chat_input("Ask about jobs, research papers, or books...")
 
 if user_query:
     # Add user message to chat
@@ -111,40 +89,48 @@ if user_query:
         # Process query
         start_time = time.time()
         
-        with st.spinner("🤖 Thinking..."):
-            result = app.invoke({
-                "query": user_query,
-                "curriculum_mode": curriculum_mode_flag,
-                "uploaded_docs": uploaded_docs,
-                "chat_history": st.session_state.chat_history
-            })
+        try:
+            with st.spinner("🤖 Thinking..."):
+                result = app.invoke({
+                    "query": user_query,
+                    "chat_history": st.session_state.chat_history
+                })
+            
+            agent_used = result.get("agent", "unknown")
+            confidence = result.get("confidence")
+            reasoning = result.get("reasoning", "")
+            answer = result.get("result", "")
+            
+        except Exception as e:
+            st.error(f"❌ An error occurred: {str(e)}")
+            answer = f"I apologize, but I encountered an error while processing your request: {str(e)}"
+            agent_used = "error"
+            confidence = 0
+            reasoning = str(e)
         
         end_time = time.time()
         latency = end_time - start_time
         
-        agent_used = result.get("agent", "unknown")
-        confidence = result.get("confidence")
-        reasoning = result.get("reasoning", "")
-        answer = result.get("result", "")
-        
-        # Cache the result if enabled
-        if use_cache:
+        # Cache the result if enabled and successful
+        if use_cache and agent_used != "error":
             cache.set(user_query, answer, agent=agent_used)
     
     # Display assistant response
     with st.chat_message("assistant"):
         st.markdown(answer)
-        # # Show routing metadata in expander
-        # with st.expander("🔍 Routing Details"):
-        #     col1, col2 = st.columns(2)
-        #     with col1:
-        #         st.metric("Agent", agent_used.title())
-        #         if confidence is not None:
-        #             st.metric("Confidence", f"{confidence:.2%}")
-        #     with col2:
-        #         st.metric("Latency", f"{latency:.2f}s")
-        #         if reasoning:
-        #             st.caption(f"**Reasoning:** {reasoning}")
+        
+        # Show routing metadata in professional expander
+        if agent_used != "cached":
+            with st.expander("🔍 Execution Details"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Agent:** {agent_used.title()}")
+                    if confidence is not None:
+                        st.write(f"**Confidence:** {confidence:.2%}")
+                with col2:
+                    st.write(f"**Latency:** {latency:.2f}s")
+                    if reasoning:
+                        st.caption(f"**Reasoning:** {reasoning}")
     
     # Add assistant response to chat history
     st.session_state.chat_history.append(("assistant", answer))
@@ -157,10 +143,11 @@ if user_query:
         result=answer,
         latency=latency,
         is_fallback=is_fallback,
-        curriculum_mode=curriculum_mode_flag,
         confidence=confidence,
         reasoning=reasoning
     )
+
+
 
 # ---------------- Sidebar Stats ----------------
 st.sidebar.divider()

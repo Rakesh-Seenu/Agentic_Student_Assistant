@@ -48,27 +48,14 @@ class OrchestratorAgent(BaseAgent):
         Returns:
             List of LangChain tools
         """
-        from agents.curriculum_agent import CurriculumAgent
         from agents.job_market_agent import JobMarketAgent
-        from agents.skill_mapping_agent import SkillMappingAgent
-        from agents.curriculum_agent import CurriculumAgent
-        from agents.job_market_agent import JobMarketAgent
-        from agents.skill_mapping_agent import SkillMappingAgent
         from agents.books_recommend_agent import BooksRecommendAgent
         from agents.paper_recommend_agent import PaperRecommendAgent
         
         # Initialize agents (lazy loading to avoid circular imports)
-        curriculum_agent = None
         job_agent = None
-        skill_agent = None
         books_agent = None
         papers_agent = None
-        
-        def get_curriculum_agent():
-            nonlocal curriculum_agent
-            if curriculum_agent is None:
-                curriculum_agent = CurriculumAgent()
-            return curriculum_agent
         
         def get_job_agent():
             nonlocal job_agent
@@ -76,14 +63,6 @@ class OrchestratorAgent(BaseAgent):
                 job_agent = JobMarketAgent()
             return job_agent
         
-        def get_skill_agent():
-            nonlocal skill_agent
-            if skill_agent is None:
-                skill_agent = SkillMappingAgent()
-            return skill_agent
-        
-        def get_books_agent():
-            nonlocal books_agent
         def get_books_agent():
             nonlocal books_agent
             if books_agent is None:
@@ -98,19 +77,9 @@ class OrchestratorAgent(BaseAgent):
         
         tools = [
             Tool(
-                name="CurriculumSearch",
-                func=lambda q: get_curriculum_agent().process(q),
-                description="Search curriculum content, course information, modules, and academic programs. Use this for questions about what courses cover specific topics, course requirements, or curriculum structure."
-            ),
-            Tool(
                 name="JobMarketSearch",
                 func=lambda q: get_job_agent().process(q),
                 description="Search job listings and career opportunities. Use this to find current job openings, understand job market demand, or get information about specific roles and their requirements."
-            ),
-            Tool(
-                name="SkillAnalysis",
-                func=lambda q: get_skill_agent().process(q),
-                description="Analyze skill gaps between curriculum and job market requirements. Use this to identify what skills students need, compare curriculum coverage with job demands, or recommend learning paths."
             ),
             Tool(
                 name="BookRecommendations",
@@ -120,7 +89,7 @@ class OrchestratorAgent(BaseAgent):
             Tool(
                 name="PaperRecommendations",
                 func=lambda q: get_papers_agent().process(q),
-                description="Find scientific research papers and academic articles. Use this to find primary sources, latest research, citations, and technical details from Semantic Scholar and CORE."
+                description="Find scientific research papers and academic articles. Use this to find primary sources, latest research, citations, and technical details from ArXiv, Semantic Scholar, and CORE."
             )
         ]
         
@@ -137,8 +106,9 @@ class OrchestratorAgent(BaseAgent):
         system_prompt = get_prompt("orchestrator_system")
         react_template = get_prompt("react_template")
         
-        # Format the template with system prompt
-        formatted_template = react_template.format(system_prompt=system_prompt)
+        # Format the template with system prompt safely using replace
+        # to avoid KeyError for {tools}, {input}, etc.
+        formatted_template = react_template.replace("{system_prompt}", system_prompt)
         
         prompt = PromptTemplate.from_template(formatted_template)
         

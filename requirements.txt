@@ -51,3 +51,6 @@ matplotlib
 seaborn
 tabulate
 zstandard
+redis
+entence-transformers 
+torch

@@ -1,189 +1,284 @@
-"""
-Response caching layer with TTL support.
-Reduces duplicate LLM calls and improves performance.
-"""
 import time
 import hashlib
 import pickle
-from typing import Optional, Any, Dict
+import json
+import os
+import numpy as np
+from typing import Optional, Any, Dict, List
 from collections import OrderedDict
+from sentence_transformers import SentenceTransformer
+from huggingface_hub import snapshot_download
+from pathlib import Path
+
+MODEL_NAME = "all-MiniLM-L6-v2"
+
+# Optional redis and openai imports
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 
 class ResponseCache:
     """
-    LRU cache with TTL for storing agent responses.
+    Standard exact-match LRU cache (In-memory).
     """
-    
     def __init__(self, ttl_seconds: int = 3600, max_size: int = 1000):
-        """
-        Initialize cache.
-        
-        Args:
-            ttl_seconds: Time to live for cached entries (default 1 hour)
-            max_size: Maximum number of entries to cache
-        """
         self.ttl_seconds = ttl_seconds
         self.max_size = max_size
         self.cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.hits = 0
         self.misses = 0
     
-    def _generate_key(self, query: str, agent: str = "") -> str:
-        """
-        Generate cache key from query and agent.
-        
-        Args:
-            query: User query
-            agent: Agent name (optional)
-            
-        Returns:
-            str: Cache key
-        """
-        # Normalize query (lowercase, strip whitespace)
-        normalized = f"{agent}:{query.lower().strip()}"
-        # Hash for consistent key length
+    def _generate_key(self, query: str) -> str:
+        normalized = f"query_cache:{query.lower().strip()}"
         return hashlib.md5(normalized.encode()).hexdigest()
     
     def get(self, query: str, agent: str = "") -> Optional[str]:
-        """
-        Get cached response if available and not expired.
-        
-        Args:
-            query: User query
-            agent: Agent name
-            
-        Returns:
-            Cached response or None if not found/expired
-        """
-        key = self._generate_key(query, agent)
-        
+        key = self._generate_key(query)
         if key not in self.cache:
             self.misses += 1
             return None
         
         entry = self.cache[key]
-        
-        # Check if expired
         if time.time() - entry['timestamp'] > self.ttl_seconds:
             del self.cache[key]
             self.misses += 1
             return None
         
-        # Move to end (most recently used)
         self.cache.move_to_end(key)
         self.hits += 1
-        
         return entry['response']
     
     def set(self, query: str, response: str, agent: str = ""):
-        """
-        Cache a response.
-        
-        Args:
-            query: User query
-            response: Agent response
-            agent: Agent name
-        """
-        key = self._generate_key(query, agent)
-        
-        # Remove oldest entry if at max size
+        key = self._generate_key(query)
         if len(self.cache) >= self.max_size and key not in self.cache:
             self.cache.popitem(last=False)
-        
         self.cache[key] = {
             'response': response,
-            'timestamp': time.time(),
-            'agent': agent
+            'timestamp': time.time()
         }
     
     def clear(self):
-        """Clear all cached entries."""
         self.cache.clear()
         self.hits = 0
         self.misses = 0
     
     def get_stats(self) -> Dict[str, Any]:
-        """
-        Get cache statistics.
-        
-        Returns:
-            Dict with cache hits, misses, size, and hit rate
-        """
         total = self.hits + self.misses
-        hit_rate = self.hits / total if total > 0 else 0
-        
         return {
             'hits': self.hits,
             'misses': self.misses,
             'size': len(self.cache),
             'max_size': self.max_size,
-            'hit_rate': hit_rate
+            'hit_rate': self.hits / total if total > 0 else 0,
+            'type': 'in-memory'
         }
+
+
+class SemanticRedisCache:
+    """
+    Persistent cache using Redis with Local Semantic Similarity support.
+    Uses SentenceTransformers (locally) to find 'similar' questions.
+    """
     
-    def save_to_disk(self, filepath: str):
-        """Save cache to disk."""
-        with open(filepath, 'wb') as f:
-            pickle.dump(self.cache, f)
-    
-    def load_from_disk(self, filepath: str):
-        """Load cache from disk."""
+    # Singleton for model loading to avoid re-loading on every call
+    _model = None
+    _model_ready = False
+
+    def __init__(self, host='localhost', port=6379, db=0, password=None, ttl_seconds=3600, similarity_threshold=0.88):
+        self.ttl_seconds = ttl_seconds
+        self.threshold = similarity_threshold
+        self.client = redis.Redis(
+            host=host, port=port, db=db, password=password, 
+            decode_responses=True, socket_timeout=5.0
+        )
+        self.hits = 0
+        self.misses = 0
+        
+        # Test connection
+        self.client.ping()
+        
+        # Load local model lazily
+        self._load_model()
+
+    def _load_model(self):
+        if SemanticRedisCache._model_ready:
+            return
+
+        model_path = Path.home() / ".cache" / "huggingface" / "hub"
+
+        print(f"[INFO] Checking embedding model: {MODEL_NAME}")
+
         try:
-            with open(filepath, 'rb') as f:
-                self.cache = pickle.load(f)
-        except FileNotFoundError:
+            # Explicit check: is it already cached?
+            local_models = list(model_path.glob(f"**/*{MODEL_NAME.replace('/', '--')}*"))
+            if not local_models:
+                print("[INFO] Model not found locally. Downloading…")
+                snapshot_download(repo_id=MODEL_NAME)
+                print("[SUCCESS] Model downloaded.")
+
+            # Load after confirmation
+            SemanticRedisCache._model = SentenceTransformer(MODEL_NAME)
+            SemanticRedisCache._model_ready = True
+            print("[INFO] Embedding model ready.")
+
+        except Exception as e:
+            SemanticRedisCache._model = None
+            SemanticRedisCache._model_ready = False
+            raise RuntimeError(
+                f"Failed to initialize embedding model '{MODEL_NAME}'. "
+                f"Semantic cache disabled."
+            ) from e
+
+
+    def _get_embedding(self, text: str) -> Optional[np.ndarray]:
+        if not SemanticRedisCache._model:
+            return None
+        try:
+            return SemanticRedisCache._model.encode(text.lower().strip())
+        except Exception as e:
+            print(f"[ERROR] Local embedding error: {e}")
+            return None
+
+    def _cosine_similarity(self, v1, v2):
+        v1, v2 = np.array(v1), np.array(v2)
+        return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+    def get(self, query: str, agent: str = "") -> Optional[str]:
+        # 1. Try EXACT match first (Fastest)
+        q_clean = query.lower().strip()
+        exact_key = f"exact_cache:{hashlib.md5(q_clean.encode()).hexdigest()}"
+        try:
+            exact_data = self.client.get(exact_key)
+            if exact_data:
+                self.hits += 1
+                return exact_data
+        except Exception:
             pass
+
+        # 2. Try LOCAL SEMANTIC match
+        if not SENTENCE_TRANSFORMERS_AVAILABLE or not SemanticRedisCache._model:
+            self.misses += 1
+            return None
+
+        query_emb = self._get_embedding(q_clean)
+        if query_emb is None:
+            self.misses += 1
+            return None
+
+        try:
+            # Note: For production use with millions of items, 
+            # you'd use Redis VSS indexes. For a few thousand, this scan is fast.
+            recent_keys = self.client.keys("semantic_meta:*")
+            for meta_key in recent_keys:
+                meta_json = self.client.get(meta_key)
+                if not meta_json: continue
+                
+                meta = json.loads(meta_json)
+                similarity = self._cosine_similarity(query_emb, meta['embedding'])
+                print(f"[DEBUG] Similarity with '{meta.get('query')}': {similarity:.4f}")
+                
+                if similarity >= self.threshold:
+                    print(f"[SUCCESS] Semantic Hit! Similarity: {similarity:.2f} (Match: '{meta['query']}')")
+                    self.hits += 1
+                    return self.client.get(meta['payload_key'])
+            
+            self.misses += 1
+            return None
+        except Exception as e:
+            print(f"[ERROR] Redis Semantic Search Error: {e}")
+            self.misses += 1
+            return None
+
+    def set(self, query: str, response: str, agent: str = ""):
+        query_clean = query.lower().strip()
+        q_hash = hashlib.md5(query_clean.encode()).hexdigest()
+        
+        exact_key = f"exact_cache:{q_hash}"
+        payload_key = f"payload_cache:{q_hash}"
+        meta_key = f"semantic_meta:{q_hash}"
+
+        try:
+            # Store payload
+            self.client.setex(payload_key, self.ttl_seconds, response)
+            # Store exact match pointer
+            self.client.setex(exact_key, self.ttl_seconds, response)
+            
+            # Store semantic metadata locally
+            if SENTENCE_TRANSFORMERS_AVAILABLE and SemanticRedisCache._model:
+                emb = self._get_embedding(query_clean)
+                if emb is not None:
+                    meta = {
+                        "query": query_clean,
+                        "embedding": emb.tolist(),
+                        "payload_key": payload_key
+                    }
+                    self.client.setex(meta_key, self.ttl_seconds, json.dumps(meta))
+        except Exception as e:
+            print(f"[ERROR] Redis SET Error: {e}")
+
+    def clear(self):
+        try:
+            keys = self.client.keys("*_cache:*") + self.client.keys("semantic_meta:*")
+            if keys:
+                self.client.delete(*keys)
+            self.hits = 0
+            self.misses = 0
+        except Exception:
+            pass
+
+    def get_stats(self) -> Dict[str, Any]:
+        try:
+            total = self.hits + self.misses
+            size = len(self.client.keys("payload_cache:*"))
+            return {
+                'hits': self.hits, 'misses': self.misses, 'size': size,
+                'hit_rate': self.hits / total if total > 0 else 0,
+                'type': 'redis-semantic'
+            }
+        except Exception:
+            return {'type': 'redis-fail'}
 
 
 # Global cache instance
-_global_cache: Optional[ResponseCache] = None
+_global_cache: Any = None
 
-
-def get_cache(ttl_seconds: int = 3600, max_size: int = 1000) -> ResponseCache:
-    """
-    Get global cache instance (singleton).
-    
-    Args:
-        ttl_seconds: TTL for cache entries
-        max_size: Max cache size
-        
-    Returns:
-        ResponseCache instance
-    """
+def get_cache(ttl_seconds: int = 3600, max_size: int = 1000) -> Any:
     global _global_cache
-    if _global_cache is None:
-        _global_cache = ResponseCache(ttl_seconds=ttl_seconds, max_size=max_size)
+    if _global_cache is not None:
+        return _global_cache
+
+    if REDIS_AVAILABLE:
+        try:
+            host = os.getenv("REDIS_HOST", "localhost")
+            port = int(os.getenv("REDIS_PORT", 6379))
+            db = int(os.getenv("REDIS_DB", 0))
+            password = os.getenv("REDIS_PASSWORD")
+            
+            print(f"[INFO] Connecting to Semantic Redis at {host}...")
+            _global_cache = SemanticRedisCache(
+                host=host, port=port, db=db, password=password, ttl_seconds=ttl_seconds
+            )
+            return _global_cache
+        except Exception as e:
+            print(f"⚠️ Redis failed: {e}. Falling back to In-memory.")
+    
+    _global_cache = ResponseCache(ttl_seconds=ttl_seconds, max_size=max_size)
     return _global_cache
 
 
 if __name__ == "__main__":
-    # Test cache
-    cache = ResponseCache(ttl_seconds=10, max_size=3)
-    
-    # Test set and get
-    print("🧪 Testing cache...")
-    cache.set("What is ML?", "Machine learning explanation", agent="curriculum")
-    result = cache.get("What is ML?", agent="curriculum")
-    print(f"✅ Cache hit: {result[:30]}...")
-    
-    # Test cache miss
-    result = cache.get("Different query", agent="curriculum")
-    print(f"❌ Cache miss: {result}")
-    
-    # Test stats
-    stats = cache.get_stats()
-    print(f"\n📊 Cache Stats:")
-    print(f"   Hits: {stats['hits']}")
-    print(f"   Misses: {stats['misses']}")
-    print(f"   Hit Rate: {stats['hit_rate']:.2%}")
-    print(f"   Size: {stats['size']}/{stats['max_size']}")
-    
-    # Test TTL
-    print(f"\n⏳ Testing TTL (waiting 11 seconds)...")
-    time.sleep(11)
-    result = cache.get("What is ML?", agent="curriculum")
-    print(f"❌ Expired cache: {result}")
-    
-    stats = cache.get_stats()
-    print(f"\n📊 Updated Stats:")
-    print(f"   Hits: {stats['hits']}")
-    print(f"   Misses: {stats['misses']}")
+    # Test
+    c = get_cache()
+    print(f"Running {c.get_stats()['type']}")
+    c.set("What are the best AI jobs?", "The best AI jobs are...")
+    print(f"Similar match: {c.get('What are best jobs in AI?')}")
+
