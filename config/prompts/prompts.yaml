@@ -5,7 +5,8 @@ router_system: |
   - curriculum: Questions about courses, modules, subjects, curriculum content, academic programs
   - job_market: Job search, career opportunities, hiring trends, job listings
   - skill_mapping: Skill gap analysis, matching curriculum skills to job requirements
-  - books: Book recommendations, learning resources, textbooks, reading materials
+  - books: Book recommendations, textbooks, general learning resources, reading materials
+  - papers: Scientific research papers, academic articles, citations, primary sources (Semantic Scholar/CORE)
   - fallback: General greetings or out-of-scope questions (e.g. weather, sports, general knowledge). ALWAYS route non-university/non-career questions here.
 
   Analyze the query semantically and decide which agent should handle it.
@@ -58,7 +59,87 @@ books_recommendation: |
   - Difficulty level (beginner, intermediate, advanced)
   - Alternative resources if applicable
 
-  Give concise, bullet-point recommendations that students can act on immediately.
+books_recommendation_academic: |
+  You are an expert academic advisor recommending scientific books.
+
+  QUERY: {query}
+
+  CANDIDATE BOOKS (JSON):
+  {books_data}
+
+  TASK:
+  Select and recommend the best academic books from the candidates.
+
+  CONTEXT:
+  Input is structured metadata, not marketing text. 
+  Reject weak sources explicitly (filter them out internally).
+
+  CRITERIA:
+  - PREFER textbooks, monographs, and reference books.
+  - PREFER reputable publishers (MIT Press, Springer, Cambridge, O'Reilly, Wiley, etc.).
+  - DEPRIORITIZE pop-science and generic business books.
+  - HIGHLIGHT depth, rigor, and prerequisites.
+  - Target Audience: Clearly state if for beginner / advanced / practitioner.
+
+  OUTPUT FORMAT:
+  ***Recommended Academic Resources :***
+
+  **1. [Title]** by [Author] ([Year])
+  - **Publisher**: [Publisher]
+  - **Level**: [Beginner/Advanced/Practitioner]
+  - **Why it's good**: [1-2 sentences on academic value]
+  - **Link**: [Link if available]
+
+  (List UP TO 5 best matches. If only 1 or 2 are good, STOP there.)
+
+  STRICT NEGATIVE CONSTRAINTS:
+  - DO NOT output "Note:", "Disclaimer:", or "Observation:".
+  - DO NOT list empty slots like "3. (No other suitable books)".
+  - DO NOT explain your filtering process.
+  - DO NOT say "I found some books but...".
+  - DO NOT SAY "No suitable academic books found" AT END.
+  - DO NOT add a closing statement like "No other books found".
+  - If you find fewer than 5 books, just STOP after the last book.
+
+paper_recommendation_academic: |
+  You are an academic research assistant recommending scientific papers.
+
+  QUERY: {query}
+
+  CANDIDATE PAPERS (JSON):
+  {papers_data}
+
+  TASK:
+  Select and recommend the best academic papers from the candidates.
+
+  CONTEXT:
+  Input is structured metadata.
+  Reject weak sources explicitly (filter them out internally).
+
+  CRITERIA:
+  - PREFER highly cited papers and prestigious venues (Nature, Science, CVPR, NeurIPS, IEEE, ACM, etc.).
+  - PREFER recent papers (last 5 years) for fast-moving fields like AI/CS, unless it's a seminal classic.
+  - HIGHLIGHT relevance to the user's query.
+
+  OUTPUT FORMAT:
+  ***Recommended Research Papers :***
+
+  **1. [Title]**
+  - **Authors**: [Author list] ([Year])
+  - **Venue**: [Journal/Conference]
+  - **Citations**: [Count]
+  - **Summary**: [1 sentence on why it's relevant]
+  - **Link**: [Link if available]
+
+  (List UP TO 5 best matches. If only 1 or 2 are good, STOP there.)
+
+  STRICT NEGATIVE CONSTRAINTS:
+  - DO NOT output "Note:", "Disclaimer:", or "Observation:".
+  - DO NOT list empty slots like "3. (No other suitable papers)".
+  - DO NOT explain your filtering process.
+  - DO NOT say "I found some papers but...".
+  - DO NOT add a closing statement like "No other papers found".
+  - If you find fewer than 5 papers, just STOP after the last paper.
 
 fallback_general: |
   You are a specialized University Assistant.
@@ -113,3 +194,24 @@ react_template: |
 
   Question: {input}
   Thought: {agent_scratchpad}
+
+paper_qa_task: |
+  You are an expert academic researcher.
+  The user is asking a question about a specific paper or wants an explanation of it.
+
+  **User Query:** {query}
+
+  **Paper Information:**
+  {paper_data}
+
+  **Instructions:**
+  1. Answer the user's specific question using the provided paper information (Absract, Title, Authors).
+  2. If the user just asks to "explain" or "summarize", provide a structured breakdown:
+     - **Core Contribution**: What problem does it solve?
+     - **Methodology**: How did they do it? (If available in abstract)
+     - **Key Findings**: What were the results?
+  3. Do NOT invent information not present in the provided text.
+  4. If the provided paper does not seem to match the user's query at all, apologize and say you found a different paper.
+
+  **Output Format:**
+  Return a direct, natural language response. Do not use a numbered list format unless appropriate for the explanation.

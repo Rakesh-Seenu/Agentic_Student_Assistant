@@ -16,12 +16,14 @@ from agents.skill_mapping_agent import (
     load_job_listings,
     analyze_skill_match,
 )
-from agents.books_agent import run_books_agent
+# from agents.books_agent import run_books_agent
+from agents.books_recommend_agent import BooksRecommendAgent
+from agents.paper_recommend_agent import PaperRecommendAgent
 from agents.fallback_agent import FallbackAgent
 
 load_dotenv()
 
-from typing import TypedDict, List, Optional, Dict, Any
+from typing import TypedDict, List, Optional, Dict, Any, Tuple
 from langchain_core.documents import Document
 
 class GraphState(TypedDict):
@@ -30,6 +32,7 @@ class GraphState(TypedDict):
     result: str
     curriculum_mode: Optional[str]
     uploaded_docs: Optional[List[Document]]
+    chat_history: List[Tuple[str, str]]  # [(role, message), ...]
     # Enhanced state for LLM router
     confidence: Optional[float]
     reasoning: Optional[str]
@@ -45,8 +48,14 @@ def route_agent(state: GraphState):
     """
     query = state["query"]
     
-    # Use LLM router for intelligent routing with orchestration detection
-    decision = route_query(query, enable_orchestration=True)
+    # Use LLM router for intelligent routing with orchestration
+    chat_history = state.get("chat_history", [])
+    
+    # Format history string if list provided (simple heuristic)
+    history_str = str(chat_history)[-1000:] if chat_history else ""
+    
+    # Use LLM router
+    decision = route_query(query, enable_orchestration=True, chat_history=history_str)
     
     print(f"🧭 Routing to: {decision.agent} agent")
     print(f"🎯 Confidence: {decision.confidence:.2f}")
@@ -57,6 +66,7 @@ def route_agent(state: GraphState):
         "query": state["query"],
         "curriculum_mode": state.get("curriculum_mode", "srh"),
         "uploaded_docs": state.get("uploaded_docs"),
+        "chat_history": state.get("chat_history", []),
         "confidence": decision.confidence,
         "reasoning": decision.reasoning,
         "metadata": {
@@ -127,8 +137,15 @@ def skill_mapping_node(state: GraphState):
 
 @traceable(name="books_node")
 def books_node(state: GraphState):
-    result = run_books_agent(state["query"])
+    agent = BooksRecommendAgent()
+    result = agent.process(state["query"])
     return {"result": result, "agent": "books"}
+
+@traceable(name="papers_node")
+def papers_node(state: GraphState):
+    agent = PaperRecommendAgent()
+    result = agent.process(state["query"], chat_history=state.get("chat_history", []))
+    return {"result": result, "agent": "papers"}
 
 @traceable(name="fallback_node")
 def fallback_node(state: GraphState):
@@ -151,6 +168,7 @@ graph.add_node("curriculum", RunnableLambda(curriculum_node))
 graph.add_node("job_market", RunnableLambda(job_market_node))
 graph.add_node("skill_mapping", RunnableLambda(skill_mapping_node))
 graph.add_node("books", RunnableLambda(books_node))
+graph.add_node("papers", RunnableLambda(papers_node))
 graph.add_node("fallback", RunnableLambda(fallback_node))
 graph.add_node("orchestrator", RunnableLambda(orchestrator_node))  # NEW
 
@@ -162,6 +180,7 @@ graph.add_conditional_edges(
         "job_market": "job_market",
         "skill_mapping": "skill_mapping",
         "books": "books",
+        "papers": "papers",
         "orchestrator": "orchestrator",  # NEW
         "fallback": "fallback",
     },
@@ -171,6 +190,7 @@ graph.add_edge("curriculum", END)
 graph.add_edge("job_market", END)
 graph.add_edge("skill_mapping", END)
 graph.add_edge("books", END)
+graph.add_edge("papers", END)
 graph.add_edge("orchestrator", END)  # NEW
 graph.add_edge("fallback", END)
 

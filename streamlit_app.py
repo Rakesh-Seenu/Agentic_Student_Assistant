@@ -115,7 +115,8 @@ if user_query:
             result = app.invoke({
                 "query": user_query,
                 "curriculum_mode": curriculum_mode_flag,
-                "uploaded_docs": uploaded_docs
+                "uploaded_docs": uploaded_docs,
+                "chat_history": st.session_state.chat_history
             })
         
         end_time = time.time()
@@ -133,18 +134,17 @@ if user_query:
     # Display assistant response
     with st.chat_message("assistant"):
         st.markdown(answer)
-        
-        # Show routing metadata in expander
-        with st.expander("🔍 Routing Details"):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Agent", agent_used.title())
-                if confidence is not None:
-                    st.metric("Confidence", f"{confidence:.2%}")
-            with col2:
-                st.metric("Latency", f"{latency:.2f}s")
-                if reasoning:
-                    st.caption(f"**Reasoning:** {reasoning}")
+        # # Show routing metadata in expander
+        # with st.expander("🔍 Routing Details"):
+        #     col1, col2 = st.columns(2)
+        #     with col1:
+        #         st.metric("Agent", agent_used.title())
+        #         if confidence is not None:
+        #             st.metric("Confidence", f"{confidence:.2%}")
+        #     with col2:
+        #         st.metric("Latency", f"{latency:.2f}s")
+        #         if reasoning:
+        #             st.caption(f"**Reasoning:** {reasoning}")
     
     # Add assistant response to chat history
     st.session_state.chat_history.append(("assistant", answer))

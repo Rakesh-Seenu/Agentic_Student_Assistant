@@ -22,7 +22,7 @@ from utils.llm_factory import LLMFactory
 class RouteDecision(BaseModel):
     """Structured output for routing decisions."""
     
-    agent: Literal["curriculum", "job_market", "skill_mapping", "books", "orchestrator", "fallback"] = Field(
+    agent: Literal["curriculum", "job_market", "skill_mapping", "books", "papers", "orchestrator", "fallback"] = Field(
         description="The agent that should handle this query"
     )
     confidence: float = Field(
@@ -65,27 +65,35 @@ class RouterAgent:
         # Use a template with placeholders, then partial them out
         # This prevents braces in the JSON schema/system prompt from being interpreted as variables
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "{system_prompt}\n\n{format_instructions}"),
+            ("system", "{system_prompt}\n\nRecent Conversation:\n{chat_history}\n\n{format_instructions}"),
             ("user", "{query}")
         ])
         
         return prompt.partial(
             system_prompt=system_prompt,
-            format_instructions=format_instructions
+            format_instructions=format_instructions,
+            chat_history="" # Default empty if not provided
         )
     
-    def route(self, query: str) -> RouteDecision:
+    def route(self, query: str, chat_history: str = "") -> RouteDecision:
         """
         Route a query to the appropriate agent.
         
         Args:
             query: User query to route
+            chat_history: Previous conversation context
             
         Returns:
             RouteDecision with agent, confidence, and reasoning
         """
         try:
-            decision = self.chain.invoke({"query": query})
+            # Format history string if list provided (simple heuristic)
+            history_str = str(chat_history)[-1000:] if chat_history else "No history."
+            
+            decision = self.chain.invoke({
+                "query": query,
+                "chat_history": history_str
+            })
             
             # Apply confidence threshold from config
             threshold = self.config.routing.confidence_threshold
@@ -105,7 +113,7 @@ class RouterAgent:
                 reasoning=f"Error during routing: {str(e)}"
             )
     
-    def route_with_orchestration(self, query: str) -> RouteDecision:
+    def route_with_orchestration(self, query: str, chat_history: str = "") -> RouteDecision:
         """
         Route with orchestration detection for complex queries.
         
@@ -113,11 +121,12 @@ class RouterAgent:
         
         Args:
             query: User query
+            chat_history: Previous conversation context
             
         Returns:
             RouteDecision
         """
-        decision = self.route(query)
+        decision = self.route(query, chat_history)
         
         # Check if query mentions multiple domains (heuristic for orchestration)
         query_lower = query.lower()
@@ -150,13 +159,14 @@ def get_router() -> RouterAgent:
     return _router
 
 
-def route_query(query: str, enable_orchestration: bool = False) -> RouteDecision:
+def route_query(query: str, enable_orchestration: bool = False, chat_history: str = "") -> RouteDecision:
     """
     Route a query to the appropriate agent.
     
     Args:
         query: User query
         enable_orchestration: Whether to detect and route complex queries to orchestrator
+        chat_history: Previous conversation context
         
     Returns:
         RouteDecision with agent, confidence, and reasoning
@@ -164,9 +174,9 @@ def route_query(query: str, enable_orchestration: bool = False) -> RouteDecision
     router = get_router()
     
     if enable_orchestration:
-        return router.route_with_orchestration(query)
+        return router.route_with_orchestration(query, chat_history)
     else:
-        return router.route(query)
+        return router.route(query, chat_history)
 
 
 if __name__ == "__main__":

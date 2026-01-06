@@ -51,13 +51,18 @@ class OrchestratorAgent(BaseAgent):
         from agents.curriculum_agent import CurriculumAgent
         from agents.job_market_agent import JobMarketAgent
         from agents.skill_mapping_agent import SkillMappingAgent
-        from agents.books_agent import BooksAgent
+        from agents.curriculum_agent import CurriculumAgent
+        from agents.job_market_agent import JobMarketAgent
+        from agents.skill_mapping_agent import SkillMappingAgent
+        from agents.books_recommend_agent import BooksRecommendAgent
+        from agents.paper_recommend_agent import PaperRecommendAgent
         
         # Initialize agents (lazy loading to avoid circular imports)
         curriculum_agent = None
         job_agent = None
         skill_agent = None
         books_agent = None
+        papers_agent = None
         
         def get_curriculum_agent():
             nonlocal curriculum_agent
@@ -79,9 +84,17 @@ class OrchestratorAgent(BaseAgent):
         
         def get_books_agent():
             nonlocal books_agent
+        def get_books_agent():
+            nonlocal books_agent
             if books_agent is None:
-                books_agent = BooksAgent()
+                books_agent = BooksRecommendAgent()
             return books_agent
+        
+        def get_papers_agent():
+            nonlocal papers_agent
+            if papers_agent is None:
+                papers_agent = PaperRecommendAgent()
+            return papers_agent
         
         tools = [
             Tool(
@@ -102,7 +115,12 @@ class OrchestratorAgent(BaseAgent):
             Tool(
                 name="BookRecommendations",
                 func=lambda q: get_books_agent().process(q),
-                description="Find book recommendations and learning resources. Use this to suggest books, textbooks, or other learning materials for specific topics or skills."
+                description="Find academic book recommendations and learning resources. Use this to suggest textbooks, monographs, or other high-quality learning materials for specific topics."
+            ),
+            Tool(
+                name="PaperRecommendations",
+                func=lambda q: get_papers_agent().process(q),
+                description="Find scientific research papers and academic articles. Use this to find primary sources, latest research, citations, and technical details from Semantic Scholar and CORE."
             )
         ]
         

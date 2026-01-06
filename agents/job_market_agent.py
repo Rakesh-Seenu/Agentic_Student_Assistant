@@ -84,7 +84,6 @@ class JobMarketAgent(BaseAgent):
             "engine": "google_jobs",
             "q": search_q if search_q else "jobs",
             "api_key": os.getenv("SERPAPI_API_KEY") or st.secrets.get("SERPAPI_API_KEY"),
-            "hl": "en",  # Default to English
         }
         
         # Add location and regional parameters if found
@@ -105,6 +104,12 @@ class JobMarketAgent(BaseAgent):
                 "uk": {"gl": "uk", "hl": "en", "google_domain": "google.co.uk"},
                 "london": {"gl": "uk", "hl": "en", "google_domain": "google.co.uk"},
                 "usa": {"gl": "us", "hl": "en", "google_domain": "google.com"},
+                "mexico": {"gl": "mx", "hl": "es", "google_domain": "google.com.mx"},
+                "canada": {"gl": "ca", "hl": "en", "google_domain": "google.ca"},
+                "france": {"gl": "fr", "hl": "fr", "google_domain": "google.fr"},
+                "spain": {"gl": "es", "hl": "es", "google_domain": "google.es"},
+                "brazil": {"gl": "br", "hl": "pt", "google_domain": "google.com.br"},
+                "australia": {"gl": "au", "hl": "en", "google_domain": "google.com.au"},
             }
             
             loc_lower = location.lower()
@@ -237,21 +242,20 @@ class JobMarketAgent(BaseAgent):
         # If no specific field mentioned, ask for clarification
         if field == "":
             return """### Which field are you interested in?
+                    Please specify the domain or technology you'd like to see job listings for. For example:
+                    - "Data Science jobs"
+                    - "Software Engineering positions"
+                    - "Machine Learning opportunities"
+                    - "Web Development careers"
+                    - "Cybersecurity jobs"
+                    - "Mobile App Development"
 
-Please specify the domain or technology you'd like to see job listings for. For example:
-- "Data Science jobs"
-- "Software Engineering positions"
-- "Machine Learning opportunities"
-- "Web Development careers"
-- "Cybersecurity jobs"
-- "Mobile App Development"
+                    **Example queries:**
+                    - "Show me data science jobs"
+                    - "Find frontend developer positions"
+                    - "Career opportunities in AI"
 
-**Example queries:**
-- "Show me data science jobs"
-- "Find frontend developer positions"
-- "Career opportunities in AI"
-
-💡 **Tip**: The more specific you are, the better the job matches!"""
+                    💡 **Tip**: The more specific you are, the better the job matches!"""
         
         # Search for jobs with the field
         listings = self.search_jobs(query, field=field)
@@ -276,7 +280,7 @@ Please specify the domain or technology you'd like to see job listings for. For 
         # Build display output using LLM (for translation and formatting)
         display_output = self.summarize_jobs(listings)
         
-        header = f"### 💼 {field.title()} Job Opportunities in {location if location else 'Global'}\n\n"
+        header = f"{field.title()} Job Opportunities in {location if location else 'Global'}\n\n"
         return header + display_output
 
 
@@ -293,5 +297,5 @@ if __name__ == "__main__":
     query = input("\n🔎 Enter job search query: ")
     result = agent.process(query)
     
-    print("\n💼 Job Market Analysis:")
+    print("Job Market Analysis:")
     print(result)
