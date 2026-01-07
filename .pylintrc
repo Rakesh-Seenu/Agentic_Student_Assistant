@@ -1,0 +1,18 @@
+[MASTER]
+ignore=venv, .git, .devcontainer, .github, docs, logs, data
+ignore-patterns=.*_test.py, test_.*.py
+
+[MESSAGES CONTROL]
+# Disable the message, report, category or checker with the given id(s).
+# C0111: Missing docstring
+# C0103: Invalid name (often too strict for variables)
+# C0301: Line too long (we'll set a custom limit)
+disable=C0111, C0103, R0903, R0913, R0914
+
+[FORMAT]
+# Maximum number of characters on a single line.
+max-line-length=120
+
+[BASIC]
+# Good variable names which should always be accepted, separated by a comma.
+good-names=i,j,k,ex,Run,_,fp,id,df,db

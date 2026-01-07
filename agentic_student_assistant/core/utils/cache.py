@@ -93,9 +93,10 @@ class SemanticRedisCache:
     _model = None
     _model_ready = False
 
-    def __init__(self, host='localhost', port=6379, db=0, password=None, ttl_seconds=3600, similarity_threshold=0.88):
+    def __init__(self, host='localhost', port=6379, db=0, password=None, ttl_seconds=3600, similarity_threshold=0.88, max_size: int = 1000):
         self.ttl_seconds = ttl_seconds
         self.threshold = similarity_threshold
+        self.max_size = max_size
         self.client = redis.Redis(
             host=host, port=port, db=db, password=password, 
             decode_responses=True, socket_timeout=5.0
@@ -238,14 +239,26 @@ class SemanticRedisCache:
     def get_stats(self) -> Dict[str, Any]:
         try:
             total = self.hits + self.misses
+            # In Redis, we count payload keys. This might be more than max_size if TTL 
+            # is long, but for stats we show current count.
             size = len(self.client.keys("payload_cache:*"))
             return {
-                'hits': self.hits, 'misses': self.misses, 'size': size,
+                'hits': self.hits,
+                'misses': self.misses,
+                'size': size,
+                'max_size': self.max_size,
                 'hit_rate': self.hits / total if total > 0 else 0,
                 'type': 'redis-semantic'
             }
         except Exception:
-            return {'type': 'redis-fail'}
+            return {
+                'hits': self.hits,
+                'misses': self.misses,
+                'size': 0,
+                'max_size': self.max_size,
+                'hit_rate': 0,
+                'type': 'redis-fail'
+            }
 
 
 # Global cache instance
@@ -265,7 +278,8 @@ def get_cache(ttl_seconds: int = 3600, max_size: int = 1000) -> Any:
             
             print(f"[INFO] Connecting to Semantic Redis at {host}...")
             _global_cache = SemanticRedisCache(
-                host=host, port=port, db=db, password=password, ttl_seconds=ttl_seconds
+                host=host, port=port, db=db, password=password, 
+                ttl_seconds=ttl_seconds, max_size=max_size
             )
             return _global_cache
         except Exception as e:

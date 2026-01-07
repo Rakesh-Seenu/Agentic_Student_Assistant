@@ -1,6 +1,6 @@
 """
 Streamlit application for Agentic Student Assistant.
-Updated to use new architecture with caching, logging, and enhanced UI.
+Redesigned with a professional two-column layout.
 """
 import os
 import json
@@ -9,6 +9,13 @@ import datetime
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_core.documents import Document
+import sys
+from pathlib import Path
+
+# Add project root to sys.path
+root_path = Path(__file__).resolve().parent.parent.parent
+if str(root_path) not in sys.path:
+    sys.path.append(str(root_path))
 
 # Utilities
 from agentic_student_assistant.core.utils.parse_pdf import parse_single_pdf
@@ -17,143 +24,189 @@ from agentic_student_assistant.core.utils.logging_manager import LoggingManager
 from agentic_student_assistant.core.utils.cache import get_cache
 from agentic_student_assistant.core.orchestration.main_graph import app
 
+# UI Utils
+from app.frontend.utils import apply_custom_css
+
 load_dotenv()
 
-# ---------------- UI Setup ----------------
-st.set_page_config(page_title="SRH Assistant", layout="wide", page_icon="🎓")
-st.title("🎓 AI-Powered University Assistant")
-st.caption("Powered by GPT-4 with LLM-based routing and multi-agent orchestration")
+# ---------------- Page Config ----------------
+st.set_page_config(
+    page_title="Agentic Student Assistant", 
+    layout="wide", 
+    page_icon="🎓"
+)
+apply_custom_css()
 
-# ---------------- Sidebar ----------------
-st.sidebar.header("⚙️ Configuration")
-
-# Cache settings
-st.sidebar.subheader("🚀 Performance")
-use_cache = st.sidebar.checkbox("Enable Response Caching", value=True)
-
-if use_cache:
-    cache = get_cache()
-    cache_stats = cache.get_stats()
-    st.sidebar.metric("Cache Type", cache_stats.get('type', 'unknown').title())
-    st.sidebar.metric("Cache Hit Rate", f"{cache_stats['hit_rate']:.1%}")
-    st.sidebar.metric("Cached Responses", f"{cache_stats['size']}/{cache_stats['max_size']}")
-    
-    if st.sidebar.button("Clear Cache"):
-        cache.clear()
-        st.sidebar.success("Cache cleared!")
-        st.rerun()
-
-# ---------------- Initialize Logger ----------------
+# ---------------- Initialize Session State ----------------
 if "logger" not in st.session_state:
     st.session_state.logger = LoggingManager(
         enable_file=True,
-        enable_gsheets=True,  # Enable if you have Google Sheets configured
+        enable_gsheets=True,
         enable_console=False
     )
 
-# ---------------- Chat Interface ----------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Display chat history
-for role, message in st.session_state.chat_history:
-    with st.chat_message(role):
-        st.markdown(message)
+# ---------------- Top Heading ----------------
+st.markdown(
+    """
+    <div style='text-align: center; padding: 0rem 0 1rem 0;'>
+        <h1 style='margin: 0; font-weight: 800; color: #ffffff; font-size: 2.5rem; letter-spacing: -0.02em;'>
+            🎓 Agentic Student Assistant
+        </h1>
+        <p style='margin: 5px 0 0 0; color: #808495; font-size: 1.1rem;'>
+            Your Intelligent Partner for Academic Success
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-# Chat input
-st.sidebar.divider()
-user_query = st.chat_input("Ask about jobs, research papers, or books...")
+# ---------------- Two-Column Layout ----------------
+col1, col2 = st.columns([3, 7])
 
-if user_query:
-    # Add user message to chat
-    st.session_state.chat_history.append(("user", user_query))
-    with st.chat_message("user"):
-        st.markdown(user_query)
-    
-    # Check cache first if enabled
-    cached_result = None
-    if use_cache:
-        cache = get_cache()
-        cached_result = cache.get(user_query)
-        if cached_result:
-            st.info("📦 Retrieved from cache")
-    
-    if cached_result:
-        # Use cached result
-        answer = cached_result
-        agent_used = "cached"
-        confidence = None
-        reasoning = "Response retrieved from cache"
-        latency = 0.0
-    else:
-        # Process query
-        start_time = time.time()
+# ========== LEFT COLUMN: Control Panel ==========
+with col1:
+    # Performance Settings Container
+    with st.container(border=True):
+        st.markdown("#### ⚙️ Settings")
+        use_cache = st.toggle(
+            "⚡ Engine Caching", 
+            value=True,
+            help="Cache responses"
+        )
         
-        try:
-            with st.spinner("🤖 Thinking..."):
-                result = app.invoke({
-                    "query": user_query,
-                    "chat_history": st.session_state.chat_history
-                })
+        # Compact Cache Stats
+        if use_cache:
+            cache = get_cache()
+            cache_stats = cache.get_stats()
             
-            agent_used = result.get("agent", "unknown")
-            confidence = result.get("confidence")
-            reasoning = result.get("reasoning", "")
-            answer = result.get("result", "")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Hits", cache_stats.get('hits', 0), label_visibility="visible")
+            with c2:
+                hit_rate = cache_stats.get('hit_rate', 0)
+                st.metric("Rate", f"{hit_rate:.0%}")
+            with c3:
+                st.metric("Miss", cache_stats.get('misses', 0))
             
-        except Exception as e:
-            st.error(f"❌ An error occurred: {str(e)}")
-            answer = f"I apologize, but I encountered an error while processing your request: {str(e)}"
-            agent_used = "error"
-            confidence = 0
-            reasoning = str(e)
-        
-        end_time = time.time()
-        latency = end_time - start_time
-        
-        # Cache the result if enabled and successful
-        if use_cache and agent_used != "error":
-            cache.set(user_query, answer, agent=agent_used)
+            if st.button("Clear", use_container_width=True, key="clear_cache"):
+                cache.clear()
+                st.success("✓ Cleared!")
+                time.sleep(0.3)
+                st.rerun()
     
-    # Display assistant response
-    with st.chat_message("assistant"):
-        st.markdown(answer)
+    # Compact Session Stats
+    with st.container(border=True):
+        st.markdown("#### 📊 Session")
+        user_msgs = len([m for m in st.session_state.chat_history if m[0] == "user"])
+        st.metric("Questions", user_msgs, label_visibility="visible")
+    
+    # Chat Input - Always at bottom
+    user_query = st.chat_input("Type your question here...")
+
+
+# ========== RIGHT COLUMN: Chat Area ==========
+with col2:
+    with st.container(border=True, height=800):
+        st.markdown("#### 💬 Chat History")
         
-        # Show routing metadata in professional expander
-        if agent_used != "cached":
-            with st.expander("🔍 Execution Details"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**Agent:** {agent_used.title()}")
-                    if confidence is not None:
-                        st.write(f"**Confidence:** {confidence:.2%}")
-                with col2:
-                    st.write(f"**Latency:** {latency:.2f}s")
-                    if reasoning:
-                        st.caption(f"**Reasoning:** {reasoning}")
-    
-    # Add assistant response to chat history
-    st.session_state.chat_history.append(("assistant", answer))
-    
-    # Log interaction
-    is_fallback = agent_used == "fallback"
-    st.session_state.logger.log_interaction(
-        query=user_query,
-        agent=agent_used,
-        result=answer,
-        latency=latency,
-        is_fallback=is_fallback,
-        confidence=confidence,
-        reasoning=reasoning
-    )
+        # Display chat history
+        for role, message in st.session_state.chat_history:
+            with st.chat_message(role, avatar="🤖" if role == "assistant" else "👤"):
+                st.markdown(message)
+        
+        # Welcome message for new users
+        if not st.session_state.chat_history:
+            with st.chat_message("assistant", avatar="🤖"):
+                st.markdown("""
+                Hello! I'm your **SRH Smart Assistant**. I can help you with:
+                
+                1. **Job Market & Career Opportunities** - Find job trends, career paths, and improve employability
+                2. **Research Papers & Academic Articles** - Discover, understand, and create research papers
+                3. **Book Recommendations** - Get suggestions on books related to your field of study
+                
+                Feel free to ask me anything!
+                """)
+        
+        # Process user input
+        if user_query:
+            # Add user message
+            st.session_state.chat_history.append(("user", user_query))
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(user_query)
+            
+            # Check cache
+            cached_result = None
+            if use_cache:
+                cache = get_cache()
+                cached_result = cache.get(user_query)
+            
+            if cached_result:
+                answer = cached_result
+                agent_used = "cached"
+                confidence = 1.0
+                reasoning = "Retrieved from semantic cache"
+                latency = 0.01
+                st.toast("⚡ Retrieved from Cache", icon="📦")
+            else:
+                start_time = time.time()
+                try:
+                    with st.spinner("Analyzing your request..."):
+                        result = app.invoke({
+                            "query": user_query,
+                            "chat_history": st.session_state.chat_history
+                        })
+                    
+                    agent_used = result.get("agent", "unknown")
+                    confidence = result.get("confidence")
+                    reasoning = result.get("reasoning", "")
+                    answer = result.get("result", "I couldn't find a specific answer.")
+                    
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    answer = "I'm sorry, I encountered an error."
+                    agent_used = "error"
+                    confidence = 0
+                    reasoning = str(e)
+                
+                latency = time.time() - start_time
+                
+                if use_cache and agent_used != "error":
+                    cache.set(user_query, answer, agent=agent_used)
+            
+            # Display response
+            with st.chat_message("assistant", avatar="🤖"):
+                st.markdown(answer)
+                
+                # # Execution details
+                # with st.expander("🔍 Execution Details"):
+                #     st.markdown(f"**Engine:** `{agent_used.upper()}`")
+                #     cols = st.columns(2)
+                #     with cols[0]:
+                #         if confidence is not None:
+                #             color = "#10b981" if confidence > 0.8 else "#f59e0b" if confidence > 0.5 else "#ef4444"
+                #             st.markdown(f"**Confidence:** <span style='color:{color}; font-weight:bold'>{confidence:.1%}</span>", unsafe_allow_html=True)
+                #     with cols[1]:
+                #         st.markdown(f"**Latency:** `{latency:.2f}s`")
+                    
+                #     if reasoning:
+                #         st.info(reasoning)
+            
+            # Add to history
+            st.session_state.chat_history.append(("assistant", answer))
+            
+            # Log interaction
+            st.session_state.logger.log_interaction(
+                query=user_query,
+                agent=agent_used,
+                result=answer,
+                latency=latency,
+                is_fallback=(agent_used == "fallback"),
+                confidence=confidence,
+                reasoning=reasoning
+            )
+            
+            st.rerun()
 
-
-
-# ---------------- Sidebar Stats ----------------
-st.sidebar.divider()
-st.sidebar.subheader("📊 Session Stats")
-st.sidebar.metric("Questions Asked", len([m for m in st.session_state.chat_history if m[0] == "user"]))
-
-if use_cache:
-    st.sidebar.metric("Cache Hits", cache_stats['hits'])
-    st.sidebar.metric("Cache Misses", cache_stats['misses'])
