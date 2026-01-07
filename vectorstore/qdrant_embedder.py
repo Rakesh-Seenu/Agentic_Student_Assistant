@@ -3,14 +3,12 @@ import os
 from dotenv import load_dotenv
 import streamlit as st
 
-# Add root project directory to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Load environment variables
 load_dotenv()
 
-from utils.parse_pdf import load_all_pdfs
-from utils.chunker import chunk_text
+from agentic_student_assistant.core.utils.parse_pdf import load_all_pdfs
+from agentic_student_assistant.core.utils.chunker import chunk_text
 
 from langchain_community.vectorstores import Qdrant
 from langchain_openai import OpenAIEmbeddings

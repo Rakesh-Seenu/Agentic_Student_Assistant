@@ -4,10 +4,8 @@ import sys
 import json
 from dotenv import load_dotenv
 
-# Add parent directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agents.job_market_agent import JobMarketAgent
+from agentic_student_assistant.talk2jobs.agents.job_market_agent import JobMarketAgent
 
 def test_mexico_search():
     agent = JobMarketAgent()
