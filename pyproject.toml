@@ -1,0 +1,59 @@
+[project]
+name = "agentic-student-assistant"
+version = "0.1.0"
+description = "A sophisticated student assistant using agentic AI."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Rakesh", email = "hsrakesh71@gmail.com" },
+]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+urls = { Homepage = "https://github.com/hsrak/Agentic_Student_Assistant", "Bug Tracker" = "https://github.com/hsrak/Agentic_Student_Assistant/issues" }
+dependencies = [
+    "openai==0.28.1",
+    "langchain==0.1.20",
+    "langchain-community==0.0.38",
+    "langchain-core==0.1.53",
+    "pydantic<2",
+    "hydra-core>=1.3.0",
+    "omegaconf>=2.3.0",
+    "pdfplumber>=0.10.2",
+    "PyMuPDF>=1.23.2",
+    "qdrant-client>=1.6.0",
+    "chromadb>=0.4.24",
+    "faiss-cpu>=1.7.4",
+    "sentence-transformers>=2.2.0",
+    "google-search-results==2.4.2",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+    "tiktoken>=0.6.0",
+    "streamlit>=1.35.0",
+    "ipython>=8.0.0",
+    "rich>=13.7.0",
+    "networkx",
+    "pylint",
+    "gspread",
+    "oauth2client",
+    "groq>=0.4.0",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "tabulate",
+    "zstandard",
+    "redis",
+    "torch",
+    "setuptools",
+    "wheel",
+    "twine",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+

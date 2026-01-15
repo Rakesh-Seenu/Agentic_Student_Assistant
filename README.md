@@ -67,7 +67,12 @@ cd Agentic_Student_Assistant
 ```
 
 # Install dependencies
-```pip install -r requirements.txt```
+### Installation with uv
+1. Install [uv](https://github.com/astral-sh/uv) if you haven't already.
+2. Sync dependencies:
+```bash
+uv sync
+```
 
 # Set up .env with your API keys (OpenAI, SerpAPI, etc.)
 ## Create a `.env` file in the root directory:
