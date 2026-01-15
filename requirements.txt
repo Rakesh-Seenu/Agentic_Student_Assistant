@@ -55,3 +55,6 @@ zstandard
 redis
 entence-transformers 
 torch
+setuptools
+wheel
+twine
