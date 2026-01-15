@@ -12,7 +12,7 @@ Our toolkit consists of the following intelligent agents:
 - **Talk2Jobs**: Real-time global job market intelligence with regional optimization for Germany, USA, Mexico, India, Japan, and more.
 - **Talk2Papers**: Multi-tier academic search across ArXiv, Semantic Scholar, CORE, and OpenReview with deep-dive Q&A capabilities.
 - **Talk2Books**: Curated reading recommendations from Open Library and Google Books with academic focus.
-- **Talk2Events**: Real-time events recommentation agent using meetup and event bride Library.(Comming soon...)
+- **Talk2Events**: Real-time events recommentation agent using meetup and event bride Library.( Coming Soon... )
 
 ---
 
