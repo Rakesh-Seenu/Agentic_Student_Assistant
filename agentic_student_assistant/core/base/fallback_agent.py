@@ -2,8 +2,6 @@
 Fallback agent for handling general queries outside specialist domains.
 Refactored to inherit from BaseAgent and use config-based architecture.
 """
-import os
-import sys
 from dotenv import load_dotenv
 
 
@@ -55,6 +53,6 @@ if __name__ == "__main__":
     test_query = "What is the capital of France?"
     result = agent.process(test_query)
     
-    print(f"\n🤖 FallbackAgent Test")
+    print("\n🤖 FallbackAgent Test")
     print(f"Query: {test_query}")
     print(f"Response: {result}")

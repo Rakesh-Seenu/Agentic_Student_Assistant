@@ -3,11 +3,10 @@ Base agent class for all specialist agents.
 Provides common interface and shared functionality.
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from omegaconf import DictConfig
+from langchain_community.chat_models import ChatOpenAI
 from agentic_student_assistant.core.utils.llm_factory import LLMFactory
-# from langchain_openai import ChatOpenAI
-from langchain.chat_models import ChatOpenAI
 
 class BaseAgent(ABC):
     """
@@ -17,15 +16,15 @@ class BaseAgent(ABC):
     the process() method.
     """
     
-    def __init__(self, config: DictConfig, agent_name: str = "base"):
+    def __init__(self, agent_config: DictConfig, agent_name: str = "base"):
         """
         Initialize base agent.
         
         Args:
-            config: Application configuration from Hydra
+            agent_config: Application configuration from Hydra
             agent_name: Name of the agent (for logging/debugging)
         """
-        self.config = config
+        self.config = agent_config
         self.agent_name = agent_name
         self.llm = self._init_llm()
     

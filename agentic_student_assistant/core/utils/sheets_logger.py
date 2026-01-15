@@ -9,7 +9,12 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-def log_to_gsheet(timestamp, query, agent, curriculum_mode, latency, is_fallback, result):
+def log_to_gsheet(
+    timestamp, query, agent, curriculum_mode, latency, is_fallback: bool = False, result: str = ""
+): # pylint: disable=R0917
+    """
+    Log an interaction to Google Sheets using a service account.
+    """
     # Decide whether to use local service account file or Streamlit secrets
     if os.path.exists("logs/gcp_service_account.json"):
         creds = Credentials.from_service_account_file("logs/gcp_service_account.json", scopes=SCOPES)

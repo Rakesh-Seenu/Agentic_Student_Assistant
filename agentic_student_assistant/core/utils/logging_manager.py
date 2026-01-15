@@ -4,7 +4,7 @@ Replaces duplicate logging code across the application.
 """
 import os
 import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, List
 from abc import ABC, abstractmethod
 
 
@@ -64,7 +64,7 @@ class GoogleSheetsLogHandler(LogHandler):
     
     def __init__(self):
         try:
-            from agentic_student_assistant.core.utils.sheets_logger import log_to_gsheet
+            from agentic_student_assistant.core.utils.sheets_logger import log_to_gsheet # pylint: disable=import-outside-toplevel
             self.log_fn = log_to_gsheet
             self.enabled = True
         except ImportError:
@@ -86,7 +86,7 @@ class GoogleSheetsLogHandler(LogHandler):
                 is_fallback=kwargs.get('is_fallback', False),
                 result=kwargs.get('result', '')
             )
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"⚠️ Google Sheets logging failed: {e}")
 
 
@@ -139,7 +139,7 @@ class LoggingManager:
         confidence: Optional[float] = None,
         reasoning: str = "",
         **extra_kwargs
-    ):
+    ): # pylint: disable=R0917
         """
         Log an agent interaction.
         
@@ -170,7 +170,7 @@ class LoggingManager:
         for handler in self.handlers:
             try:
                 handler.log(**log_data)
-            except Exception as e:
+            except Exception as e: # pylint: disable=broad-exception-caught
                 print(f"⚠️ Log handler failed: {e}")
     
     def add_handler(self, handler: LogHandler):

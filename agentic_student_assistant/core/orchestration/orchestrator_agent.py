@@ -2,8 +2,6 @@
 Orchestrator agent using ReAct pattern for complex multi-step queries.
 Coordinates multiple specialist agents to answer comprehensive questions.
 """
-import os
-import sys
 from typing import List
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool
@@ -12,7 +10,6 @@ from langchain_core.prompts import PromptTemplate
 
 from agentic_student_assistant.core.base.base_agent import BaseAgent
 from agentic_student_assistant.core.utils.config_loader import get_config, get_prompt
-from agentic_student_assistant.core.utils.llm_factory import LLMFactory
 
 
 class OrchestratorAgent(BaseAgent):
@@ -46,9 +43,9 @@ class OrchestratorAgent(BaseAgent):
         Returns:
             List of LangChain tools
         """
-        from agentic_student_assistant.talk2jobs.agents.job_market_agent import JobMarketAgent
-        from agentic_student_assistant.talk2books.agents.books_recommend_agent import BooksRecommendAgent
-        from agentic_student_assistant.talk2papers.agents.paper_recommend_agent import PaperRecommendAgent
+        from agentic_student_assistant.talk2jobs.agents.job_market_agent import JobMarketAgent # pylint: disable=import-outside-toplevel
+        from agentic_student_assistant.talk2books.agents.books_recommend_agent import BooksRecommendAgent # pylint: disable=import-outside-toplevel
+        from agentic_student_assistant.talk2papers.agents.paper_recommend_agent import PaperRecommendAgent # pylint: disable=import-outside-toplevel
         
         # Initialize agents (lazy loading to avoid circular imports)
         job_agent = None
@@ -77,17 +74,29 @@ class OrchestratorAgent(BaseAgent):
             Tool(
                 name="JobMarketSearch",
                 func=lambda q: get_job_agent().process(q),
-                description="Search job listings and career opportunities. Use this to find current job openings, understand job market demand, or get information about specific roles and their requirements."
+                description=(
+                    "Search job listings and career opportunities. Use this to find "
+                    "current job openings, understand job market demand, or get "
+                    "information about specific roles and their requirements."
+                )
             ),
             Tool(
                 name="BookRecommendations",
                 func=lambda q: get_books_agent().process(q),
-                description="Find academic book recommendations and learning resources. Use this to suggest textbooks, monographs, or other high-quality learning materials for specific topics."
+                description=(
+                    "Find academic book recommendations and learning resources. Use this "
+                    "to suggest textbooks, monographs, or other high-quality learning "
+                    "materials for specific topics."
+                )
             ),
             Tool(
                 name="PaperRecommendations",
                 func=lambda q: get_papers_agent().process(q),
-                description="Find scientific research papers and academic articles. Use this to find primary sources, latest research, citations, and technical details from ArXiv, Semantic Scholar, and CORE."
+                description=(
+                    "Find scientific research papers and academic articles. Use this to "
+                    "find primary sources, latest research, citations, and technical "
+                    "details from ArXiv, Semantic Scholar, and CORE."
+                )
             )
         ]
         
@@ -128,11 +137,14 @@ class OrchestratorAgent(BaseAgent):
             Comprehensive answer from orchestration
         """
         try:
-            result = self.agent_executor.invoke({"input": query})
-            return result.get("output", "Unable to process query")
-        except Exception as e:
+            orch_result = self.agent_executor.invoke({"input": query})
+            return orch_result.get("output", "Unable to process query")
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"❌ Orchestration error: {e}")
-            return f"I encountered an error while processing your complex query: {str(e)}. Please try breaking it down into simpler questions."
+            return (
+                f"I encountered an error while processing your complex query: {str(e)}. "
+                "Please try breaking it down into simpler questions."
+            )
 
 
 if __name__ == "__main__":

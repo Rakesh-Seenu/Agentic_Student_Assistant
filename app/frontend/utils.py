@@ -1,5 +1,4 @@
 import streamlit as st
-from typing import Dict, Any, Optional
 
 def apply_custom_css():
     """Apply native Streamlit dark theme precisely matching the screenshot."""

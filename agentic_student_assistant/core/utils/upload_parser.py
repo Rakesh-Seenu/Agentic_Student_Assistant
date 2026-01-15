@@ -1,4 +1,4 @@
-from PyPDF2 import PdfReader
+from PyPDF2 import PdfReader # pylint: disable=import-error
 
 def parse_uploaded_pdf(uploaded_file) -> str:
     """

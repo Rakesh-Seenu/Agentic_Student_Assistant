@@ -2,8 +2,7 @@
 Configuration loader using Hydra for centralized config management.
 Provides singleton access to configuration throughout the application.
 """
-import os
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from hydra import compose, initialize_config_dir
 from hydra.core.global_hydra import GlobalHydra
 from pathlib import Path
@@ -55,7 +54,7 @@ class ConfigManager:
             cls._initialized = True
             print(f"✅ Configuration loaded from: {config_dir}")
         except Exception as e:
-            raise RuntimeError(f"Failed to load configuration: {e}")
+            raise RuntimeError(f"Failed to load configuration: {e}") from e
     
     @classmethod
     def get_prompt(cls, prompt_name: str) -> str:
@@ -68,8 +67,8 @@ class ConfigManager:
         Returns:
             str: The prompt template
         """
-        config = cls.get_config()
-        prompt = config.prompts.get(prompt_name, "")
+        app_config = cls.get_config()
+        prompt = app_config.prompts.get(prompt_name, "")
         if not prompt:
             print(f"⚠️ Warning: Prompt '{prompt_name}' not found in config")
         return prompt
@@ -102,5 +101,5 @@ if __name__ == "__main__":
     print(f"📋 Cache Enabled: {config.caching.enabled}")
     
     # Test prompt loading
-    print(f"\n📝 Router System Prompt:")
+    print("\n📝 Router System Prompt:")
     print(get_prompt("router_system")[:200] + "...")

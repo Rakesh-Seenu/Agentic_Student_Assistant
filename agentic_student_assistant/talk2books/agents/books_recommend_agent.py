@@ -1,6 +1,5 @@
 
-import os
-import sys
+
 import json
 from dotenv import load_dotenv
 from pathlib import Path
@@ -63,6 +62,10 @@ class BooksRecommendAgent(BaseAgent):
 
 if __name__ == "__main__":
     load_dotenv()
-    agent = BooksRecommendAgent()
-    query = input(" Enter book topic: ")
-    print(agent.process(query))
+    test_agent = BooksRecommendAgent()
+    
+    test_query = "Recommend some advanced books on machine learning"
+    print(f"Query: {test_query}\n")
+    
+    test_result = test_agent.process(test_query)
+    print(test_result)

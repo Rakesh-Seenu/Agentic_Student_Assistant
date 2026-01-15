@@ -5,7 +5,7 @@ Supports OpenAI (paid) and Groq (free) with automatic fallback.
 import os
 from typing import Optional
 # from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI # pylint: disable=no-name-in-module,import-error
 from langchain.embeddings import OpenAIEmbeddings
 from omegaconf import DictConfig
 
@@ -31,18 +31,24 @@ class LLMFactory:
         if groq_key:
             print("✅ Using Groq (Free Tier) as requested")
             return "groq"
-        elif openai_key and not openai_key.startswith("sk-your-"):
+        
+        if openai_key and not openai_key.startswith("sk-your-"):
             print("✅ Groq key missing. Using OpenAI (paid)")
             return "openai"
-        else:
-            raise ValueError(
+        
+        raise ValueError(
                 "❌ No valid API key found! Please set:\n"
                 "  - GROQ_API_KEY (Required for this configuration)\n"
                 "Get Groq key: https://console.groq.com/keys"
             )
     
     @classmethod
-    def create_llm(cls, model_config: DictConfig, temperature: Optional[float] = None, streaming: Optional[bool] = None) -> ChatOpenAI:
+    def create_llm(
+        cls,
+        model_config: DictConfig,
+        temperature: Optional[float] = None,
+        streaming: Optional[bool] = None
+    ) -> ChatOpenAI:
         """
         Create LLM instance with automatic provider detection.
         
@@ -58,11 +64,19 @@ class LLMFactory:
         
         if provider == "openai":
             return cls._create_openai_llm(model_config, temperature, streaming)
-        elif provider == "groq":
+        
+        if provider == "groq":
             return cls._create_groq_llm(model_config, temperature, streaming)
+            
+        return None
     
     @classmethod
-    def _create_openai_llm(cls, model_config: DictConfig, temperature: Optional[float], streaming: Optional[bool]) -> ChatOpenAI:
+    def _create_openai_llm(
+        cls,
+        model_config: DictConfig,
+        temperature: Optional[float],
+        streaming: Optional[bool]
+    ) -> ChatOpenAI:
         """Create OpenAI LLM instance."""
         return ChatOpenAI(
             model=model_config.name,
@@ -135,16 +149,19 @@ class LLMFactory:
         is_openai_valid = openai_key and not openai_key.startswith("sk-your-")
         
         if is_openai_valid:
-            return OpenAIEmbeddings(model=model_config.get("embedding_model", "text-embedding-3-small"))
-        else:
-            print("⚠️ Using HuggingFace Embeddings (Free/Local) because OpenAI key is missing.")
-            try:
-                from langchain_community.embeddings import HuggingFaceEmbeddings
-                return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-            except ImportError:
-                raise ImportError(
-                    "❌ 'sentence-transformers' not found! Please run: pip install sentence-transformers"
-                )
+            embeddings_model = model_config.get(
+                "embedding_model", "text-embedding-3-small"
+            )
+            return OpenAIEmbeddings(model=embeddings_model)
+            
+        print("⚠️ Using HuggingFace Embeddings (Free/Local) because OpenAI key is missing.")
+        try:
+            from langchain_community.embeddings import HuggingFaceEmbeddings # pylint: disable=import-outside-toplevel
+            return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        except ImportError as exc:
+            raise ImportError(
+                "❌ 'sentence-transformers' not found! Please run: pip install sentence-transformers"
+            ) from exc
 
 
 if __name__ == "__main__":
@@ -161,7 +178,7 @@ if __name__ == "__main__":
     try:
         embeddings = LLMFactory.create_embeddings(config.models)
         print(f"✅ Created: {embeddings.model}")
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-exception-caught
         print(f"⚠️ Embeddings error: {e}")
     
     # Test with override
@@ -174,5 +191,5 @@ if __name__ == "__main__":
     try:
         response = llm.invoke("Say 'Hello from LLM factory!'")
         print(f"✅ Response: {response.content}")
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-exception-caught
         print(f"❌ Error: {e}")

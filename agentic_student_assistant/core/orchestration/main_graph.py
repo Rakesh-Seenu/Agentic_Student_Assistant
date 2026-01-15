@@ -1,10 +1,10 @@
 import os
-import sys
 import datetime
+from typing import TypedDict, List, Optional, Dict, Any
 from dotenv import load_dotenv
-from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableLambda
-from langsmith import traceable
+from langsmith import traceable # pylint: disable=import-error
+from langgraph.graph import StateGraph, END # pylint: disable=import-error
 
 # Agent imports
 from agentic_student_assistant.talk2jobs.agents.job_market_agent import run_job_market_agent
@@ -12,24 +12,33 @@ from agentic_student_assistant.talk2jobs.agents.job_market_agent import run_job_
 from agentic_student_assistant.talk2books.agents.books_recommend_agent import BooksRecommendAgent
 from agentic_student_assistant.talk2papers.agents.paper_recommend_agent import PaperRecommendAgent
 from agentic_student_assistant.core.base.fallback_agent import FallbackAgent
+from agentic_student_assistant.core.orchestration.router_agent import route_query
 
 load_dotenv()
 
-from typing import TypedDict, List, Optional, Dict, Any, Tuple
-from langchain_core.documents import Document
-
+# State definition
 class GraphState(TypedDict):
+    """
+    Represents the state of our graph.
+
+    Attributes:
+        query: User query
+        chat_history: Conversation history
+        agent: The agent that handled the query
+        result: The final answer
+        confidence: Router confidence score
+        reasoning: Router reasoning
+        metadata: Additional metadata
+    """
     query: str
+    chat_history: List[str]
     agent: str
     result: str
-    chat_history: List[Tuple[str, str]]  # [(role, message), ...]
-    # Enhanced state for LLM router
     confidence: Optional[float]
-    reasoning: Optional[str]
+    reasoning: str
     metadata: Optional[Dict[str, Any]]
 
 # ------------ ROUTING (LLM-BASED) -------------
-from agentic_student_assistant.core.orchestration.router_agent import route_query
 
 def route_agent(state: GraphState):
     """
@@ -64,14 +73,6 @@ def route_agent(state: GraphState):
     }
 
 # ------------ NODE DEFINITIONS -------------
-from langchain_community.vectorstores import FAISS
-# from langchain_openai import OpenAIEmbeddings
-from langchain.chat_models import ChatOpenAI
-from langchain.embeddings import OpenAIEmbeddings
-
-from langchain.chains import ConversationalRetrievalChain
-# from langchain_openai import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
 
 @traceable(name="job_market_node")
 def job_market_node(state: GraphState):
@@ -98,7 +99,9 @@ def fallback_node(state: GraphState):
 
 @traceable(name="orchestrator_node")
 def orchestrator_node(state: GraphState):
-    from agentic_student_assistant.core.orchestration.orchestrator_agent import OrchestratorAgent
+    """Node for orchestrator agent."""
+    from agentic_student_assistant.core.orchestration.orchestrator_agent import OrchestratorAgent # pylint: disable=import-outside-toplevel
+    
     orchestrator = OrchestratorAgent()
     result = orchestrator.process(state["query"])
     return {"result": result, "agent": "orchestrator"}
@@ -135,7 +138,7 @@ graph.set_entry_point("router")
 app = graph.compile()
 
 def log_query(query: str, agent: str, result: str, latency: float = None, is_fallback: bool = False, 
-              confidence: float = None, reasoning: str = ""):
+              confidence: float = None, reasoning: str = ""): # pylint: disable=R0917
     os.makedirs("logs", exist_ok=True)
     log_path = "logs/workflow_logs.txt"
     with open(log_path, "a", encoding="utf-8") as f:
@@ -157,22 +160,18 @@ def log_query(query: str, agent: str, result: str, latency: float = None, is_fal
 
 # ------------ CLI EXECUTION -------------
 if __name__ == "__main__":
-    query = input("\n🔎 Enter your query: ")
+    user_query = input("\n🔎 Enter your query: ")
     final_state = app.invoke({
-        "query": query,
+        "query": user_query,
         "chat_history": []
     })
 
     print(f"\n✅ Final Answer from {final_state['agent']} Agent:\n{final_state['result']}")
     
-    # Log with router metadata
     log_query(
-        query=query,
+        query=user_query,
         agent=final_state["agent"],
         result=final_state["result"],
         confidence=final_state.get("confidence"),
         reasoning=final_state.get("reasoning", "")
     )
-
-
-

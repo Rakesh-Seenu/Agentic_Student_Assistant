@@ -2,14 +2,12 @@
 LLM-based router agent with structured output.
 Replaces keyword-based routing with semantic understanding.
 """
-import sys
-import os
 from typing import Literal
+# pylint: disable=no-name-in-module
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 # from langchain_openai import ChatOpenAI
-from langchain.chat_models import ChatOpenAI
-
+from langchain_community.chat_models import ChatOpenAI
 from langchain.output_parsers import PydanticOutputParser
 
 
@@ -45,7 +43,7 @@ class RouterAgent:
         self.llm = self._init_llm()
         self.parser = PydanticOutputParser(pydantic_object=RouteDecision)
         self.prompt = self._create_prompt()
-        self.chain = self.prompt | self.llm | self.parser
+        self.chain = self.prompt | self.llm | self.parser # pylint: disable=unsupported-binary-operation
     
     def _init_llm(self) -> ChatOpenAI:
         """Initialize LLM for routing."""
@@ -102,7 +100,7 @@ class RouterAgent:
             
             return decision
         
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"❌ Routing error: {e}")
             # Fallback to safe default
             return RouteDecision(
@@ -146,12 +144,12 @@ class RouterAgent:
 
 
 # Singleton instance
-_router: RouterAgent = None
+_router: 'RouterAgent' = None
 
 
-def get_router() -> RouterAgent:
+def get_router() -> 'RouterAgent':
     """Get global router instance (singleton)."""
-    global _router
+    global _router # pylint: disable=global-statement
     if _router is None:
         _router = RouterAgent()
     return _router
@@ -173,8 +171,8 @@ def route_query(query: str, enable_orchestration: bool = False, chat_history: st
     
     if enable_orchestration:
         return router.route_with_orchestration(query, chat_history)
-    else:
-        return router.route(query, chat_history)
+
+    return router.route(query, chat_history)
 
 
 if __name__ == "__main__":
@@ -188,11 +186,10 @@ if __name__ == "__main__":
         "Find papers and books to learn about Transformers for my next job",  # Multi-domain
     ]
     
-    for query in test_queries:
-        print(f"\n❓ Query: {query}")
-        decision = route_query(query, enable_orchestration=True)
-        print(f"   🎯 Agent: {decision.agent}")
-        print(f"   📊 Confidence: {decision.confidence:.2f}")
-        print(f"   💭 Reasoning: {decision.reasoning}")
+    for test_query in test_queries:
+        print(f"\n❓ Query: {test_query}")
+        test_decision = route_query(test_query, enable_orchestration=True)
+        print(f"   🎯 Agent: {test_decision.agent}")
+        print(f"   📊 Confidence: {test_decision.confidence:.2f}")
+        print(f"   💭 Reasoning: {test_decision.reasoning}")
         print("-" * 70)
-

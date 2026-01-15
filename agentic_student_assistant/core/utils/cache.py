@@ -1,12 +1,10 @@
 import time
 import hashlib
-import pickle
 import json
 import os
 import numpy as np
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict
 from collections import OrderedDict
-from sentence_transformers import SentenceTransformer
 from huggingface_hub import snapshot_download
 from pathlib import Path
 
@@ -33,7 +31,7 @@ class ResponseCache:
     def __init__(self, ttl_seconds: int = 3600, max_size: int = 1000):
         self.ttl_seconds = ttl_seconds
         self.max_size = max_size
-        self.cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        self.cache: OrderedDict = OrderedDict()
         self.hits = 0
         self.misses = 0
     
@@ -93,13 +91,24 @@ class SemanticRedisCache:
     _model = None
     _model_ready = False
 
-    def __init__(self, host='localhost', port=6379, db=0, password=None, ttl_seconds=3600, similarity_threshold=0.88, max_size: int = 1000):
+    def __init__(
+        self,
+        host='localhost',
+        port=6379,
+        db=0,
+        password=None,
+        ttl_seconds=3600,
+        similarity_threshold=0.88,
+        max_size: int = 1000,
+        **redis_kwargs
+    ): # pylint: disable=R0917
         self.ttl_seconds = ttl_seconds
         self.threshold = similarity_threshold
         self.max_size = max_size
         self.client = redis.Redis(
             host=host, port=port, db=db, password=password, 
-            decode_responses=True, socket_timeout=5.0
+            decode_responses=True, socket_timeout=5.0,
+            **redis_kwargs
         )
         self.hits = 0
         self.misses = 0
@@ -145,7 +154,7 @@ class SemanticRedisCache:
             return None
         try:
             return SemanticRedisCache._model.encode(text.lower().strip())
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"[ERROR] Local embedding error: {e}")
             return None
 
@@ -162,7 +171,7 @@ class SemanticRedisCache:
             if exact_data:
                 self.hits += 1
                 return exact_data
-        except Exception:
+        except Exception: # pylint: disable=broad-exception-caught
             pass
 
         # 2. Try LOCAL SEMANTIC match
@@ -181,7 +190,8 @@ class SemanticRedisCache:
             recent_keys = self.client.keys("semantic_meta:*")
             for meta_key in recent_keys:
                 meta_json = self.client.get(meta_key)
-                if not meta_json: continue
+                if not meta_json:
+                    continue
                 
                 meta = json.loads(meta_json)
                 similarity = self._cosine_similarity(query_emb, meta['embedding'])
@@ -194,7 +204,7 @@ class SemanticRedisCache:
             
             self.misses += 1
             return None
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"[ERROR] Redis Semantic Search Error: {e}")
             self.misses += 1
             return None
@@ -223,7 +233,7 @@ class SemanticRedisCache:
                         "payload_key": payload_key
                     }
                     self.client.setex(meta_key, self.ttl_seconds, json.dumps(meta))
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"[ERROR] Redis SET Error: {e}")
 
     def clear(self):
@@ -233,7 +243,7 @@ class SemanticRedisCache:
                 self.client.delete(*keys)
             self.hits = 0
             self.misses = 0
-        except Exception:
+        except Exception: # pylint: disable=broad-exception-caught
             pass
 
     def get_stats(self) -> Dict[str, Any]:
@@ -250,7 +260,7 @@ class SemanticRedisCache:
                 'hit_rate': self.hits / total if total > 0 else 0,
                 'type': 'redis-semantic'
             }
-        except Exception:
+        except Exception: # pylint: disable=broad-exception-caught
             return {
                 'hits': self.hits,
                 'misses': self.misses,
@@ -265,15 +275,15 @@ class SemanticRedisCache:
 _global_cache: Any = None
 
 def get_cache(ttl_seconds: int = 3600, max_size: int = 1000) -> Any:
-    global _global_cache
+    global _global_cache  # pylint: disable=global-statement
     if _global_cache is not None:
         return _global_cache
 
     if REDIS_AVAILABLE:
         try:
             host = os.getenv("REDIS_HOST", "localhost")
-            port = int(os.getenv("REDIS_PORT", 6379))
-            db = int(os.getenv("REDIS_DB", 0))
+            port = int(os.getenv("REDIS_PORT", "6379"))
+            db = int(os.getenv("REDIS_DB", "0"))
             password = os.getenv("REDIS_PASSWORD")
             
             print(f"[INFO] Connecting to Semantic Redis at {host}...")
@@ -282,8 +292,8 @@ def get_cache(ttl_seconds: int = 3600, max_size: int = 1000) -> Any:
                 ttl_seconds=ttl_seconds, max_size=max_size
             )
             return _global_cache
-        except Exception as e:
-            print(f"⚠️ Redis failed: {e}. Falling back to In-memory.")
+        except Exception as redis_err: # pylint: disable=broad-exception-caught
+            print(f"⚠️ Redis failed: {redis_err}. Falling back to In-memory.")
     
     _global_cache = ResponseCache(ttl_seconds=ttl_seconds, max_size=max_size)
     return _global_cache
@@ -295,4 +305,3 @@ if __name__ == "__main__":
     print(f"Running {c.get_stats()['type']}")
     c.set("What are the best AI jobs?", "The best AI jobs are...")
     print(f"Similar match: {c.get('What are best jobs in AI?')}")
-

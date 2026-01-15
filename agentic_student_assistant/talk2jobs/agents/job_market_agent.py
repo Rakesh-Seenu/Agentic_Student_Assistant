@@ -2,13 +2,12 @@
 Job market agent for searching jobs.
 """
 import os
-import sys
 import json
+from pathlib import Path
 from dotenv import load_dotenv
 import streamlit as st
 
 
-from pathlib import Path
 from agentic_student_assistant.core.base.base_agent import BaseAgent
 from agentic_student_assistant.core.utils.config_loader import get_config
 from agentic_student_assistant.core.utils.prompt_loader import load_agent_prompts
@@ -122,10 +121,13 @@ class JobMarketAgent(BaseAgent):
         search = GoogleSearch(params)
         try:
             results = search.get_dict()
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             print(f"❌ SerpAPI Error: {e}")
             if "400" in str(e):
-                return [{"error": "invalid_request", "message": "The search request was invalid. Try refining your query."}]
+                return [{
+                    "error": "invalid_request",
+                    "message": "The search request was invalid. Try refining your query."
+                }]
             return []
         
         # Check if error in results
@@ -149,7 +151,7 @@ class JobMarketAgent(BaseAgent):
                 fallback_search = GoogleSearch(fallback_params)
                 fallback_results = fallback_search.get_dict()
                 jobs = fallback_results.get("jobs_results", [])
-            except Exception as e:
+            except Exception as e: # pylint: disable=broad-exception-caught
                 print(f"❌ Fallback Error: {e}")
         if not jobs:
             return []
@@ -293,10 +295,10 @@ def run_job_market_agent(query: str) -> str:
 
 
 if __name__ == "__main__":
-    agent = JobMarketAgent()
+    test_agent = JobMarketAgent()
     
-    query = input("\n🔎 Enter job search query: ")
-    result = agent.process(query)
+    test_query = input("\n🔎 Enter job search query: ")
+    test_result = test_agent.process(test_query)
     
     print("Job Market Analysis:")
-    print(result)
+    print(test_result)

@@ -1,6 +1,5 @@
 
-import os
-import sys
+
 import json
 from dotenv import load_dotenv
 
@@ -63,12 +62,13 @@ class PaperRecommendAgent(BaseAgent):
             refined = refined.replace('"', '').replace("'", "")
             print(f"🔍 Refined Query: '{query}' -> '{refined}'")
             return refined
-        except Exception:
+        except Exception as e: # pylint: disable=broad-exception-caught
+            print(f"❌ Error in paper search: {e}")
             return query  # Fallback to original
 
-    def process(self, query: str, **kwargs) -> str:
+    def process(self, query: str, **kwargs) -> str: # pylint: disable=too-many-branches
         """
-        Process paper recommendation query with refinement.
+        Summarize paper findings using LLM.query with refinement.
         """
         chat_history = kwargs.get("chat_history", [])
         
@@ -77,9 +77,11 @@ class PaperRecommendAgent(BaseAgent):
             # A. Try history first
             if chat_history:
                 # Basic check: does history actually contain paper info?
-                last_bot_msg = next((msg for role, msg in reversed(chat_history) if role == "assistant"), "")
-                if len(last_bot_msg) > 100: # Heuristic: if message is long enough to contain info
-                     return self._explain_selection(query, chat_history)
+                last_bot_msg = next(
+                    (msg for role, msg in reversed(chat_history) if role == "assistant"), ""
+                )
+                if len(last_bot_msg) > 100:  # Heuristic: if message is long enough
+                    return self._explain_selection(query, chat_history)
 
             # B. If history empty or fails, treat as "Search & Explain"
             # e.g. "Explain the paper 'BioBridge'" -> Search BioBridge -> Explain result #1
@@ -94,8 +96,14 @@ class PaperRecommendAgent(BaseAgent):
         arxiv_results = self.arxiv_search.search(search_query, limit=3)
         
         # Track errors but don't return yet
-        has_rate_limit = any(isinstance(res, dict) and res.get("error") == "rate_limit" for res in ss_results + core_results)
-        has_forbidden = any(isinstance(res, dict) and res.get("error") == "forbidden" for res in ss_results + core_results)
+        has_rate_limit = any(
+            isinstance(res, dict) and res.get("error") == "rate_limit"
+            for res in ss_results + core_results
+        )
+        has_forbidden = any(
+            isinstance(res, dict) and res.get("error") == "forbidden"
+            for res in ss_results + core_results
+        )
 
         merged_papers = normalize_papers(ss_results, core_results, arxiv_results)
         
@@ -115,26 +123,33 @@ class PaperRecommendAgent(BaseAgent):
                 # Keep if at least one meaningful keyword is present
                 if any(k in text for k in keywords if len(k) > 3):
                     filtered_papers.append(p)
-                elif len(keywords) == 0: # If no specific keywords, keep all
-                     filtered_papers.append(p)
+                elif len(keywords) == 0:  # If no specific keywords, keep all
+                    filtered_papers.append(p)
             
             if filtered_papers:
                 merged_papers = filtered_papers
 
         # Pass ORIGINAL query to LLM for final ranking context
         if not merged_papers:
-             # Try fallback to original query if refined one failed
+            # Try fallback to original query if refined one failed
             if search_query != query:
-                 print("⚠️ Refined search failed, trying original query...")
-                 ss_results = self.ss_search.search(query, limit=5)
-                 core_results = self.core_search.search(query, limit=5)
-                 merged_papers = normalize_papers(ss_results, core_results)
+                print("⚠️ Refined search failed, trying original query...")
+                ss_results = self.ss_search.search(query, limit=5)
+                core_results = self.core_search.search(query, limit=5)
+                merged_papers = normalize_papers(ss_results, core_results)
 
         if not merged_papers:
             if has_rate_limit:
-                 return "⚠️ **Rate Limit Reached**: The Semantic Scholar API is currently limiting requests. I tried to find fallback results but found nothing. Please wait a moment or try again later."
+                return (
+                    "⚠️ **Rate Limit Reached**: The Semantic Scholar API is currently "
+                    "limiting requests. I tried to find fallback results but found nothing. "
+                    "Please wait a moment or try again later."
+                )
             if has_forbidden:
-                 return "⚠️ **Access Forbidden**: Semantic Scholar has restricted access (403). I tried to find fallback results but found nothing. Try a different query."
+                return (
+                    "⚠️ **Access Forbidden**: Semantic Scholar has restricted access (403). "
+                    "I tried to find fallback results but found nothing. Try a different query."
+                )
             return f"⚠️ I couldn't find any academic papers matching '{query}'. Try broader terms."
         
         # 5. LLM Ranking (Use original query)
@@ -149,7 +164,11 @@ class PaperRecommendAgent(BaseAgent):
     def _is_selection_query(self, query: str) -> bool:
         """Heuristic to check if user wants details on a previous result."""
         q = query.lower()
-        triggers = ["explain", "tell me more", "elaborate", "summary of", "what about", "the first one", "second one", "#1", "#2", "this paper", "in this paper", "in the paper"]
+        triggers = [
+            "explain", "tell me more", "elaborate", "summary of", "what about",
+            "the first one", "second one", "#1", "#2", "this paper",
+            "in this paper", "in the paper"
+        ]
         return any(t in q for t in triggers)
 
     def _explain_selection(self, query: str, history: list) -> str:
@@ -188,8 +207,14 @@ class PaperRecommendAgent(BaseAgent):
         arxiv_results = self.arxiv_search.search(search_query, limit=1)
         
         # Track errors but don't return yet
-        has_rate_limit = any(isinstance(res, dict) and res.get("error") == "rate_limit" for res in ss_results + core_results)
-        has_forbidden = any(isinstance(res, dict) and res.get("error") == "forbidden" for res in ss_results + core_results)
+        has_rate_limit = any(
+            isinstance(res, dict) and res.get("error") == "rate_limit"
+            for res in ss_results + core_results
+        )
+        has_forbidden = any(
+            isinstance(res, dict) and res.get("error") == "forbidden"
+            for res in ss_results + core_results
+        )
         for res in ss_results + core_results:
             if isinstance(res, dict) and res.get("error") == "timeout":
                 print(f"⚠️ Search timeout encountered for: {search_query}")
@@ -204,9 +229,16 @@ class PaperRecommendAgent(BaseAgent):
         
         if not merged_papers:
             if has_rate_limit:
-                 return "⚠️ **Rate Limit Reached**: The Semantic Scholar API is currently limiting requests. I tried fallbacks but found no matches for this specific paper."
+                return (
+                    "⚠️ **Rate Limit Reached**: The Semantic Scholar API is currently "
+                    "limiting requests. I tried fallbacks but found no matches for this "
+                    "specific paper."
+                )
             if has_forbidden:
-                 return "⚠️ **Access Forbidden**: Semantic Scholar has restricted access (403). I tried to find fallback results but found nothing for this specific paper."
+                return (
+                    "⚠️ **Access Forbidden**: Semantic Scholar has restricted access (403). "
+                    "I tried to find fallback results but found nothing for this specific paper."
+                )
             return f"⚠️ I tried to find the paper '{search_query}' to explain it, but found no matches."
         
         target_paper = merged_papers[0]  # Take the best match
@@ -221,6 +253,10 @@ class PaperRecommendAgent(BaseAgent):
 
 if __name__ == "__main__":
     load_dotenv()
-    agent = PaperRecommendAgent()
-    query = input("Enter paper topic: ")
-    print(agent.process(query))
+    test_agent = PaperRecommendAgent()
+    
+    test_query = "Find recent papers on Large Language Models"
+    print(f"Query: {test_query}\n")
+    
+    test_result = test_agent.process(test_query)
+    print(test_result)
