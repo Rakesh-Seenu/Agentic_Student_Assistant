@@ -14,7 +14,7 @@ COPY . .
 # 1. Export dependencies to requirements.txt
 # 2. Install dependencies globally (--system)
 # 3. Install the project package globally
-RUN uv export --frozen --format requirements-txt > requirements.txt && \
+RUN uv export --format requirements-txt > requirements.txt && \
     uv pip install --system --no-cache -r requirements.txt && \
     uv pip install --system --no-cache . && \
     rm requirements.txt
