@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies
-RUN uv sync --frozen
+RUN uv sync
 
 # Copy application code
 COPY . .
