@@ -1,31 +1,39 @@
-FROM python:3.10-slim
+# ==========================================
+# Multi-Stage Build for Optimizing Size
+# ==========================================
+
+# --- Stage 1: Builder ---
+FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-# Install uv for faster dependency management
+# Install uv
 RUN pip install --no-cache-dir uv
 
-# Copy dependency files first (for better caching)
+# Copy dependency definition
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies (without installing the project itself)
-# This avoids needing README.md at this stage
-RUN uv sync --frozen --no-install-project
+# Install dependencies (no project) to .venv
+# --compile bytecode for faster startup
+RUN uv sync --frozen --no-install-project --compile-bytecode
 
-# Copy application code (including README.md)
+# --- Stage 2: Runner ---
+FROM python:3.10-slim AS runner
+
+WORKDIR /app
+
+# Copy the virtual environment from builder
+# This excludes all build tools and caches, making image smaller
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
 COPY . .
 
-# Install the project itself
-RUN uv sync --frozen
-
-# Set environment variables
+# Set environment
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-
-# Railway uses PORT environment variable
 ENV PORT=8000
-EXPOSE ${PORT}
 
-# Run FastAPI with dynamic port
+# Railway-compatible entrypoint
 CMD uvicorn app.backend.main:app --host 0.0.0.0 --port ${PORT}
