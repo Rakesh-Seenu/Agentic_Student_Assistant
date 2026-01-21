@@ -94,6 +94,71 @@ GROQ_API_KEY=your_groq_key  # For free LLM alternative```
 # Launch the dashboard
 ```streamlit run app/frontend/streamlit_app.py```
 
+## 🚀 API (FastAPI Backend)
+
+The project includes a production-ready REST API for programmatic access.
+
+### Run the API
+```bash
+uvicorn app.backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/docs` | GET | Interactive Swagger UI |
+| `/api/v1/health` | GET | Health check |
+| `/api/v1/chat` | POST | Main chat interface (auto-routing) |
+| `/api/recommend-papers` | POST | Direct paper recommendations |
+| `/api/find-jobs` | POST | Direct job search |
+| `/api/recommend-books` | POST | Direct book recommendations |
+| `/api/v1/cache/stats` | GET | Cache statistics |
+| `/api/v1/cache` | DELETE | Clear cache |
+
+### Example Requests
+
+**General Chat (Auto-routing):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Find ML jobs in Berlin", "use_cache": true}'
+```
+
+**Direct Paper Search:**
+```bash
+curl -X POST "http://localhost:8000/api/recommend-papers" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "transformer architecture papers", "use_cache": true}'
+```
+
+**Direct Job Search:**
+```bash
+curl -X POST "http://localhost:8000/api/find-jobs" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Data scientist jobs in Tokyo", "use_cache": true}'
+```
+
+**Direct Book Recommendations:**
+```bash
+curl -X POST "http://localhost:8000/api/recommend-books" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "deep learning for beginners", "use_cache": true}'
+```
+
+## 🐳 Docker Deployment
+
+```bash
+# Build the image
+docker build -t agentic-student-assistant .
+
+# Run the API
+docker run -p 8000:8000 --env-file .env agentic-student-assistant
+
+# Run Streamlit UI
+docker run -p 8501:8501 --env-file .env agentic-student-assistant \
+  streamlit run app/frontend/streamlit_app.py --server.port 8501
+```
+
 ---
 
 ## 📖 Usage
