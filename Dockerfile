@@ -6,13 +6,17 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 # Copy dependency files first (for better caching)
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv sync --frozen
+# Install dependencies (without installing the project itself)
+# This avoids needing README.md at this stage
+RUN uv sync --frozen --no-install-project
 
-# Copy application code
+# Copy application code (including README.md)
 COPY . .
+
+# Install the project itself
+RUN uv sync --frozen
 
 # Set environment variables
 ENV PATH="/app/.venv/bin:$PATH"
