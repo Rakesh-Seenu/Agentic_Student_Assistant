@@ -15,7 +15,7 @@ COPY . .
 # 2. Install dependencies globally (--system)
 # 3. Install the project package globally
 RUN uv export --format requirements-txt > requirements.txt && \
-    uv pip install --system --no-cache -r requirements.txt && \
+    uv pip install --system --no-cache --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt && \
     uv pip install --system --no-cache . && \
     rm requirements.txt
 
