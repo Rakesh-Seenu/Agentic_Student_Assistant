@@ -25,4 +25,4 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PORT=8000
 
 # Run FastAPI directly (no path adjustment needed)
-CMD uvicorn app.backend.main:app --host 0.0.0.0 --port ${PORT}
+CMD sh -c "uvicorn app.backend.main:app --host 0.0.0.0 --port ${PORT}"
