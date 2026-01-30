@@ -70,4 +70,35 @@ index = [
 torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.11.1",
+    "pytest-asyncio>=0.21.0",
+    "responses>=0.23.0",
+    "fakeredis>=2.18.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["agentic_student_assistant"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--cov=agentic_student_assistant",
+    "--cov-report=html",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+markers = [
+    "integration: marks tests as integration tests (requiring external APIs)",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
 

@@ -16,17 +16,18 @@ class BaseAgent(ABC):
     the process() method.
     """
     
-    def __init__(self, agent_config: DictConfig, agent_name: str = "base"):
+    def __init__(self, agent_config: DictConfig, agent_name: str = "base", llm: Any = None):
         """
         Initialize base agent.
         
         Args:
             agent_config: Application configuration from Hydra
             agent_name: Name of the agent (for logging/debugging)
+            llm: Optional LLM instance for dependency injection (testing)
         """
         self.config = agent_config
         self.agent_name = agent_name
-        self.llm = self._init_llm()
+        self.llm = llm if llm is not None else self._init_llm()
     
     def _init_llm(self) -> ChatOpenAI:
         """
