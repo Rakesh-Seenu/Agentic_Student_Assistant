@@ -11,6 +11,7 @@ from agentic_student_assistant.talk2jobs.agents.job_market_agent import run_job_
 # from agentic_student_assistant.core.base.books_agent import run_books_agent
 from agentic_student_assistant.talk2books.agents.books_recommend_agent import BooksRecommendAgent
 from agentic_student_assistant.talk2papers.agents.paper_recommend_agent import PaperRecommendAgent
+from agentic_student_assistant.talk2docs.agents.docs_agent import DocsRecommendAgent
 from agentic_student_assistant.core.base.fallback_agent import FallbackAgent
 from agentic_student_assistant.core.orchestration.router_agent import route_query
 
@@ -97,6 +98,13 @@ def fallback_node(state: GraphState):
     result = fallback.run(state["query"])
     return {"result": result, "agent": "fallback"}
 
+@traceable(name="documents_node")
+def documents_node(state: GraphState):
+    """Node for document Q&A agent."""
+    agent = DocsRecommendAgent()
+    result = agent.process(state["query"], chat_history=state.get("chat_history", []))
+    return {"result": result, "agent": "documents"}
+
 @traceable(name="orchestrator_node")
 def orchestrator_node(state: GraphState):
     """Node for orchestrator agent."""
@@ -113,6 +121,7 @@ graph.add_node("router", RunnableLambda(route_agent))
 graph.add_node("job_market", RunnableLambda(job_market_node))
 graph.add_node("books", RunnableLambda(books_node))
 graph.add_node("papers", RunnableLambda(papers_node))
+graph.add_node("documents", RunnableLambda(documents_node))
 graph.add_node("fallback", RunnableLambda(fallback_node))
 graph.add_node("orchestrator", RunnableLambda(orchestrator_node))  # NEW
 
@@ -123,6 +132,7 @@ graph.add_conditional_edges(
         "job_market": "job_market",
         "books": "books",
         "papers": "papers",
+        "documents": "documents",
         "orchestrator": "orchestrator",  # NEW
         "fallback": "fallback",
     },
@@ -131,6 +141,7 @@ graph.add_conditional_edges(
 graph.add_edge("job_market", END)
 graph.add_edge("books", END)
 graph.add_edge("papers", END)
+graph.add_edge("documents", END)
 graph.add_edge("orchestrator", END)  # NEW
 graph.add_edge("fallback", END)
 

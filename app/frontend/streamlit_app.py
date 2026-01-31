@@ -5,7 +5,8 @@ Redesigned with a professional two-column layout.
 import os
 import json
 import time
-import datetime
+import uuid
+from typing import List, Tuple, Dict
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_core.documents import Document
@@ -37,7 +38,42 @@ st.set_page_config(
 )
 apply_custom_css()
 
-# ---------------- Initialize Session State ----------------
+# Caching for performance
+@st.cache_resource
+def get_doc_manager():
+    try:
+        from agentic_student_assistant.talk2docs.tools.document_management_tool import DocumentManagementTool
+        return DocumentManagementTool()
+    except Exception as e:
+        print(f"❌ Failed to initialize Document Manager: {e}")
+        return None
+
+@st.cache_data(ttl=60) # Cache for 1 minute
+def cached_list_documents():
+    manager = get_doc_manager()
+    if manager:
+        return manager.list_documents()
+    return []
+
+# ---------------- Initialization ----------------
+def send_feedback(query, response, rating):
+    try:
+        import requests
+        requests.post(
+            "http://localhost:8000/api/feedback",
+            json={
+                "query": query,
+                "response": response,
+                "agent": "unknown",
+                "rating": rating,
+                "session_id": st.session_state.session_id
+            },
+            timeout=2
+        )
+        st.toast(f"Thanks for feedback! {'👍' if rating > 0 else '👎'}")
+    except Exception:
+        st.toast("Failed to send feedback", icon="❌")
+
 if "logger" not in st.session_state:
     st.session_state.logger = LoggingManager(
         enable_file=True,
@@ -47,6 +83,15 @@ if "logger" not in st.session_state:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "uploaded_documents" not in st.session_state:
+    st.session_state.uploaded_documents = []
+
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
+if "last_response_data" not in st.session_state:
+    st.session_state.last_response_data = None
 
 # ---------------- Top Heading ----------------
 st.markdown(
@@ -103,6 +148,106 @@ with col1:
         user_msgs = len([m for m in st.session_state.chat_history if m[0] == "user"])
         st.metric("Questions", user_msgs, label_visibility="visible")
     
+    # Feedback Stats
+    with st.container(border=True):
+        st.markdown("#### 📈 Feedback")
+        try:
+            import requests
+            response = requests.get("http://localhost:8000/api/feedback/stats", timeout=2)
+            if response.status_code == 200:
+                stats = response.json()["stats"]
+                overall = stats.get("overall", {})
+                if overall.get("total", 0) > 0:
+                    st.metric(
+                        "Satisfaction",
+                        f"{overall.get('satisfaction_rate', 0):.0f}%",
+                        delta=f"{overall.get('positive', 0)} 👍"
+                    )
+                    st.caption(f"{overall.get('total', 0)} total ratings")
+                else:
+                    st.info("No feedback yet")
+        except Exception:
+            st.caption("Stats unavailable")
+    
+    # Document Upload Section
+    with st.container(border=True):
+        st.markdown("#### 📄 Documents")
+        # Document Manager
+        doc_manager = get_doc_manager()
+        
+        # File Uploader
+        uploaded_file = st.file_uploader(
+            "Drag and drop file here", 
+            type=["pdf", "txt"],
+            help="Limit 200MB per file • PDF, TXT"
+        )
+        
+        if uploaded_file and doc_manager:
+            if st.button("📥 Upload", type="primary", use_container_width=True):
+                with st.spinner("Processing document..."):
+                    try:
+                        # Initialize Processor
+                        from agentic_student_assistant.talk2docs.tools.document_processing_tool import DocumentProcessingTool
+                        processor = DocumentProcessingTool()
+                        
+                        # Process
+                        bytes_data = uploaded_file.getvalue()
+                        doc_data = processor.process_upload(
+                            file_content=bytes_data,
+                            filename=uploaded_file.name
+                        )
+                        
+                        # Upload to Qdrant using Manager
+                        count = doc_manager.upload_document(
+                            document_id=doc_data["document_id"],
+                            chunks=doc_data["chunks"],
+                            metadata=doc_data["metadata"]
+                        )
+                        
+                        st.success(f"✓ Uploaded {uploaded_file.name}!")
+                        st.toast(f"📄 {count} chunks indexed", icon="✅")
+                        time.sleep(1)
+                        # Clear cache to show new doc immediately
+                        cached_list_documents.clear()
+                        st.rerun()
+                    except Exception as e:
+                         st.error(f"Upload failed: {str(e)}")
+        
+        # List uploaded documents
+        try:
+            docs = cached_list_documents()
+            
+            if docs:
+                st.markdown(f"**{len(docs)} document(s)**")
+                for doc in docs[:5]:  # Show max 5
+                    col_doc, col_del = st.columns([4, 1])
+                    with col_doc:
+                        # Format timestamp (e.g. 2023-10-25T14:30 -> 14:30)
+                        ts = doc.get('upload_time', '')
+                        ts_display = ts.split('T')[1][:5] if 'T' in ts else ''
+                        
+                        # Show filename + unique info
+                        label = f"📄 {doc['filename'][:15]}..." if len(doc['filename']) > 15 else f"📄 {doc['filename']}"
+                        st.caption(f"{label} ({ts_display})")
+                        
+                    with col_del:
+                        if st.button("🗑️", key=f"del_{doc['document_id']}", help=f"Delete {doc['filename']}"):
+                            try:
+                                if doc_manager:
+                                    doc_manager.delete_document(doc['document_id'])
+                                    st.success("Deleted!")
+                                    time.sleep(0.5)
+                                    cached_list_documents.clear() # Clear cache
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+            else:
+                st.info("No documents uploaded yet")
+        except Exception as e:
+            st.warning("⚠️ **Network Issue:** Could not connect to the document database or AI model.")
+            st.caption(f"Error details: {str(e)}")
+            st.info("💡 **Tip:** This usually happens if your internet is blocked or you can't reach Hugging Face/Qdrant Cloud.")
+    
     # Chat Input - Always at bottom
     user_query = st.chat_input("Type your question here...")
 
@@ -113,9 +258,20 @@ with col2:
         st.markdown("#### 💬 Chat History")
         
         # Display chat history
-        for role, message in st.session_state.chat_history:
+        for i, (role, message) in enumerate(st.session_state.chat_history):
             with st.chat_message(role, avatar="🤖" if role == "assistant" else "👤"):
                 st.markdown(message)
+                
+            # Feedback buttons for the *latest* assistant message only
+            if role == "assistant" and i == len(st.session_state.chat_history) - 1:
+                interaction_key = f"fb_{i}"
+                col_fb_1, col_fb_2, col_fb_3 = st.columns([1, 1, 10])
+                with col_fb_1:
+                    if st.button("👍", key=f"{interaction_key}_up"):
+                        send_feedback(st.session_state.chat_history[i-1][1], message, 1)
+                with col_fb_2:
+                    if st.button("👎", key=f"{interaction_key}_down"):
+                        send_feedback(st.session_state.chat_history[i-1][1], message, -1)
         
         # Welcome message for new users
         if not st.session_state.chat_history:
@@ -126,6 +282,7 @@ with col2:
                 1. **Job Market & Career Opportunities** - Find job trends, career paths, and improve employability
                 2. **Research Papers & Academic Articles** - Discover, understand, and create research papers
                 3. **Book Recommendations** - Get suggestions on books related to your field of study
+                4. **Document Q&A** - Upload your documents (PDF/TXT) and ask questions about them
                 
                 Feel free to ask me anything!
                 """)
@@ -180,19 +337,14 @@ with col2:
             with st.chat_message("assistant", avatar="🤖"):
                 st.markdown(answer)
                 
-                # # Execution details
-                # with st.expander("🔍 Execution Details"):
-                #     st.markdown(f"**Engine:** `{agent_used.upper()}`")
-                #     cols = st.columns(2)
-                #     with cols[0]:
-                #         if confidence is not None:
-                #             color = "#10b981" if confidence > 0.8 else "#f59e0b" if confidence > 0.5 else "#ef4444"
-                #             st.markdown(f"**Confidence:** <span style='color:{color}; font-weight:bold'>{confidence:.1%}</span>", unsafe_allow_html=True)
-                #     with cols[1]:
-                #         st.markdown(f"**Latency:** `{latency:.2f}s`")
-                    
-                #     if reasoning:
-                #         st.info(reasoning)
+                # Store response data for feedback
+                st.session_state.last_response_data = {
+                    "query": user_query,
+                    "response": answer,
+                    "agent": agent_used,
+                    "latency": latency,
+                    "confidence": confidence
+                }
             
             # Add to history
             st.session_state.chat_history.append(("assistant", answer))
@@ -208,5 +360,9 @@ with col2:
                 reasoning=reasoning
             )
             
+            # Use rerun to update chat history immediately and show feedback buttons for new message
             st.rerun()
+
+
+
 

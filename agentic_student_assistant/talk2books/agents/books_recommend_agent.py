@@ -9,6 +9,11 @@ from agentic_student_assistant.core.utils.prompt_loader import load_agent_prompt
 from agentic_student_assistant.talk2books.tools.openlibrary_tool import OpenLibrarySearch
 from agentic_student_assistant.talk2books.tools.googlebooks_tool import GoogleBooksSearch
 from agentic_student_assistant.talk2books.tools.book_utils import normalize_books
+try:
+    import agentlightning as agl
+    AGL_AVAILABLE = True
+except ImportError:
+    AGL_AVAILABLE = False
 
 
 class BooksRecommendAgent(BaseAgent):
@@ -57,7 +62,15 @@ class BooksRecommendAgent(BaseAgent):
             books_data=json.dumps(merged_books, indent=2)
         )
         
-        response = self.llm.invoke(prompt)
+        # Agent Lightning Instrumentation
+        if AGL_AVAILABLE:
+            with agl.trace(name="books_recommend_process", agent_name="books_agent") as trace:
+                agl.emit_prompt(prompt, tags=["books", "recommendation"])
+                response = self.llm.invoke(prompt)
+                agl.emit_llm_response(response.content)
+        else:
+            response = self.llm.invoke(prompt)
+
         return response.content
 
 if __name__ == "__main__":

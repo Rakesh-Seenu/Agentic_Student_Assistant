@@ -3,193 +3,96 @@
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-## 🌟 Overview
+A modular AI assistant designed to help students and researchers with daily academic tasks. It uses multiple specialized agents to handle specific queries like finding research papers, searching for jobs, recommending books, or answering questions from your own documents.
 
-**Agentic Student Assistant** is an intelligent academic companion built with **LangGraph**, **OpenAI**, and modern AI infrastructure. It empowers students and researchers with specialized AI agents for career intelligence, academic research, and curated reading recommendations.
+## 🤖 What It Does
 
-Our toolkit consists of the following intelligent agents:
+The system routes your query to the most relevant specialist agent:
 
-- **Talk2Jobs**: Real-time global job market intelligence with regional optimization for Germany, USA, Mexico, India, Japan, and more.
-- **Talk2Papers**: Multi-tier academic search across ArXiv, Semantic Scholar, CORE, and OpenReview with deep-dive Q&A capabilities.
-- **Talk2Books**: Curated reading recommendations from Open Library and Google Books with academic focus.
-- **Talk2Events**: Real-time events recommentation agent using meetup and event bride Library.( Coming Soon... )
+*   **Talk2Jobs**: Searches for job postings globally (LinkedIn, Glassdoor via Google Jobs). You can specify locations (e.g., "Data Science jobs in Berlin").
+*   **Talk2Papers**: Searches academic databases (ArXiv, Semantic Scholar, CORE) for research papers and provides summaries.
+*   **Talk2Books**: Recommends books based on your interests using Open Library and Google Books.
+*   **Talk2Docs**: Allows you to upload your own PDF or TXT files and ask questions about them.
+*   **Talk2Events** *(In Development)*: Will provide meetup and event recommendations.
 
----
+## 🚀 Quick Start
 
-## 🏗️ Architecture
+### Prerequisites
+- Python 3.10 or higher
+- [uv](https://github.com/astral-sh/uv) (recommended for fast dependency management) or `pip`
 
-The system leverages a sophisticated multi-agent orchestration pattern using **LangGraph**, featuring semantic caching with **Redis** and comprehensive monitoring via **Google Cloud Logging**.
-
-![Architecture Diagram](assets/architecture.png)
-
----
-
-## 🛠️ Tech Stack
-
-- **Orchestration**: LangGraph (ReAct)
-- **Intelligence**: OpenAI GPT-4
-- **Infrastructure**: Redis (Semantic Cache), Google Cloud Logging
-- **Interface**: Streamlit (Dashboard)
-- **Language**: Python 3.10+
-
----
-
-## 🌟 Key Features
-
-### 1. Advanced Academic Research (Talk2Papers) 📑
-A high-fidelity research tool that queries the world's leading academic databases in parallel:
-- **Multi-Tier Search**: `ArXiv` + `Semantic Scholar` + `CORE` + `OpenReview.net`
-- **Deep-Dive Q&A**: Ask follow-up questions about specific papers' methodology or findings
-- **Robust Fallback**: Automatically switches sources if an API is rate-limited or forbidden
-- **Semantic Similarity**: Local embedding-based semantic caching for instant similar query responses
-
-### 2. Reading Recommendations (Talk2Books) 📚
-Curated reading lists using **Open Library** and **Google Books**:
-- **Academic Focus**: Filters for reputable publishers and academic sources
-- **Detailed Summaries**: Provides insights into core contributions and target audience
-
-### 3. Global Job Market Intelligence (Talk2Jobs) 💼
-Precision search across international regions:
-- **Regional Intelligence**: Specific optimizations for **Mexico**, **Germany**, **Japan**, **India**, **USA**, and more
-- **Language Aware**: Automatically adjusts search parameters (`hl`, `gl`, `google_domain`) for local results
-
-### 4. Smart Caching System 🧠
-Redis-based persistent caching with local semantic similarity:
-- **Exact Match**: Hash-based instant retrieval
-- **Semantic Match**: SentenceTransformer-powered similarity search (threshold: 0.88)
-- **Zero API Cost**: Completely local embedding generation
-- **80-90% Latency Reduction**: Through intelligent response caching
-
-
-# Clone and enter the repository
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/yourusername/Agentic_Student_Assistant
 cd Agentic_Student_Assistant
 ```
 
-# Install dependencies
-### Installation with uv
-1. Install [uv](https://github.com/astral-sh/uv) if you haven't already.
-2. Sync dependencies:
+### 2. Install Dependencies
+Using `uv` (faster):
 ```bash
 uv sync
 ```
+Or using standard `pip`:
+```bash
+pip install -r requirements.txt
+```
 
-# Set up .env with your API keys (OpenAI, SerpAPI, etc.)
-## Create a `.env` file in the root directory:
+### 3. Configure API Keys
+Create a `.env` file in the root directory. You will need at least an OpenAI key (or Groq for a free alternative).
 
 ```bash
+# Required
 OPENAI_API_KEY=your_openai_key
-SERPAPI_API_KEY=your_serpapi_key
-# Optional (for enhanced features)
-CORE_API_KEY=your_core_key
-SEMANTIC_SCHOLAR_API_KEY=your_ss_key
-REDIS_HOST=your_redis_host
-REDIS_PORT=6379
-REDIS_DB=0
-REDIS_PASSWORD=your_redis_password
-GROQ_API_KEY=your_groq_key  # For free LLM alternative```
+# OR
+GROQ_API_KEY=your_groq_key
+
+# Optional (for specific features)
+SERPAPI_API_KEY=your_serpapi_key       # For Job Search stability
+SEMANTIC_SCHOLAR_API_KEY=your_ss_key   # For higher rate limits on paper search
+REDIS_HOST=localhost                   # For caching (optional, defaults to local memory if failed)
 ```
 
-# Launch the dashboard
-```streamlit run app/frontend/streamlit_app.py```
-
-## 🚀 API (FastAPI Backend)
-
-The project includes a production-ready REST API for programmatic access.
-
-### Run the API
+### 4. Run the Application
+Start the Streamlit dashboard:
 ```bash
-uvicorn app.backend.main:app --host 0.0.0.0 --port 8000 --reload
+streamlit run app/frontend/streamlit_app.py
 ```
-
-### API Endpoints
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/docs` | GET | Interactive Swagger UI |
-| `/api/v1/health` | GET | Health check |
-| `/api/v1/chat` | POST | Main chat interface (auto-routing) |
-| `/api/recommend-papers` | POST | Direct paper recommendations |
-| `/api/find-jobs` | POST | Direct job search |
-| `/api/recommend-books` | POST | Direct book recommendations |
-| `/api/v1/cache/stats` | GET | Cache statistics |
-| `/api/v1/cache` | DELETE | Clear cache |
-
-### Example Requests
-
-**General Chat (Auto-routing):**
-```bash
-curl -X POST "http://localhost:8000/api/v1/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Find ML jobs in Berlin", "use_cache": true}'
-```
-
-**Direct Paper Search:**
-```bash
-curl -X POST "http://localhost:8000/api/recommend-papers" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "transformer architecture papers", "use_cache": true}'
-```
-
-**Direct Job Search:**
-```bash
-curl -X POST "http://localhost:8000/api/find-jobs" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Data scientist jobs in Tokyo", "use_cache": true}'
-```
-
-**Direct Book Recommendations:**
-```bash
-curl -X POST "http://localhost:8000/api/recommend-books" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "deep learning for beginners", "use_cache": true}'
-```
-
-## 🐳 Docker Deployment
-
-```bash
-# Build the image
-docker build -t agentic-student-assistant .
-
-# Run the API
-docker run -p 8000:8000 --env-file .env agentic-student-assistant
-
-# Run Streamlit UI
-docker run -p 8501:8501 --env-file .env agentic-student-assistant \
-  streamlit run app/frontend/streamlit_app.py --server.port 8501
-```
+*The app will open in your browser at `http://localhost:8501`*
 
 ---
 
-## 📖 Usage
+## 🏗️ Architecture
 
-### Example Queries
+The project is built using:
+- **LangGraph**: Manages the workflow and routing between agents.
+- **FastAPI**: Provides the backend API endpoints.
+- **Streamlit**: Renders the frontend user interface.
+- **Qdrant**: Vector database for storing and searching your uploaded documents.
+- **Redis & Local Cache**: Speeds up repeated queries to save API costs.
 
-**Job Search:**
-```
-"Find data science jobs in Berlin"
-"Show me machine learning positions in Tokyo"
-```
+## 🛠️ Advanced Usage (API)
 
-**Paper Research:**
-```
-"Papers about transformer architecture"
-"Explain the BioBridge paper"
-```
+If you prefer to use the backend API directly (e.g., for building a different frontend):
 
-**Book Recommendations:**
-```
-"Books on deep learning for beginners"
-"Academic texts on quantum computing"
-```
+1. **Start the Backend Server**:
+   ```bash
+   uvicorn app.backend.main:app --reload
+   ```
 
-## 📊 Performance Metrics
+2. **Access Documentation**:
+   Go to `http://localhost:8000/docs` to see the interactive Swagger UI.
 
-- **Routing Accuracy**: ~98%
-- **Cache Hit Rate**: 80-90% (with Redis + Semantic Matching)
-- **Average Latency**: <2s (cached), 5-8s (fresh query)
-- **Supported Databases**: 7 (ArXiv, Semantic Scholar, CORE, OpenReview, Open Library, Google Books, Google Jobs)
+3. **Example API Call (Document Upload)**:
+   ```bash
+   curl -X POST "http://localhost:8000/api/upload-document" \
+     -F "file=@lecture_notes.pdf"
+   ```
 
+## 📊 Project Status
+- **Core Agents**: Active & Tested
+- **UI**: Functional (Streamlit)
+- **Memory**: Persistent for Documents (Qdrant)
+- **Status**: Stable Beta
 
-**Built with ❤️ for students and researchers worldwide** 🌍🎓
-
+---
+*Built for educational purposes.*

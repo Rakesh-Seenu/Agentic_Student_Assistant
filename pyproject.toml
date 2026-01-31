@@ -54,6 +54,7 @@ dependencies = [
     "setuptools",
     "wheel",
     "twine",
+    "agentlightning",
 ]
 
 [build-system]

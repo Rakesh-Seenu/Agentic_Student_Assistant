@@ -4,11 +4,18 @@ import pdfplumber
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extracts and cleans text from a given PDF file."""
     text = ""
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                except Exception as e:
+                    print(f"⚠️ Warning: Failed to extract text from page in {pdf_path}: {e}")
+    except Exception as e:
+        print(f"❌ Error opening PDF {pdf_path}: {e}")
+    
     return text.strip()
 
 def load_all_pdfs(folder_path: str) -> list:

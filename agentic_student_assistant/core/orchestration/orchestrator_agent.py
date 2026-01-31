@@ -46,11 +46,13 @@ class OrchestratorAgent(BaseAgent):
         from agentic_student_assistant.talk2jobs.agents.job_market_agent import JobMarketAgent # pylint: disable=import-outside-toplevel
         from agentic_student_assistant.talk2books.agents.books_recommend_agent import BooksRecommendAgent # pylint: disable=import-outside-toplevel
         from agentic_student_assistant.talk2papers.agents.paper_recommend_agent import PaperRecommendAgent # pylint: disable=import-outside-toplevel
+        from agentic_student_assistant.talk2docs.agents.docs_agent import DocsRecommendAgent # pylint: disable=import-outside-toplevel
         
         # Initialize agents (lazy loading to avoid circular imports)
         job_agent = None
         books_agent = None
         papers_agent = None
+        docs_agent = None
         
         def get_job_agent():
             nonlocal job_agent
@@ -69,6 +71,12 @@ class OrchestratorAgent(BaseAgent):
             if papers_agent is None:
                 papers_agent = PaperRecommendAgent()
             return papers_agent
+        
+        def get_docs_agent():
+            nonlocal docs_agent
+            if docs_agent is None:
+                docs_agent = DocsRecommendAgent()
+            return docs_agent
         
         tools = [
             Tool(
@@ -96,6 +104,15 @@ class OrchestratorAgent(BaseAgent):
                     "Find scientific research papers and academic articles. Use this to "
                     "find primary sources, latest research, citations, and technical "
                     "details from ArXiv, Semantic Scholar, and CORE."
+                )
+            ),
+            Tool(
+                name="DocumentQA",
+                func=lambda q: get_docs_agent().process(q),
+                description=(
+                    "Answer questions about user-uploaded documents. Use this when the "
+                    "user asks about their own documents, uploaded PDFs, or personal files. "
+                    "Provides Q&A with context from uploaded documents."
                 )
             )
         ]

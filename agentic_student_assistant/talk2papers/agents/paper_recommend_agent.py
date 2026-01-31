@@ -13,6 +13,11 @@ from agentic_student_assistant.talk2papers.tools.core_tool import CoreSearch
 from agentic_student_assistant.talk2papers.tools.openreview_tool import OpenReviewSearch
 from agentic_student_assistant.talk2papers.tools.arxiv_tool import ArXivSearch
 from agentic_student_assistant.talk2papers.tools.paper_utils import normalize_papers
+try:
+    import agentlightning as agl
+    AGL_AVAILABLE = True
+except ImportError:
+    AGL_AVAILABLE = False
 
 
 class PaperRecommendAgent(BaseAgent):
@@ -158,7 +163,15 @@ class PaperRecommendAgent(BaseAgent):
             papers_data=json.dumps(merged_papers, indent=2)
         )
         
-        response = self.llm.invoke(prompt)
+        # Agent Lightning Instrumentation
+        if AGL_AVAILABLE:
+            with agl.trace(name="paper_recommend_process", agent_name="paper_agent") as trace:
+                agl.emit_prompt(prompt, tags=["papers", "recommendation"])
+                response = self.llm.invoke(prompt)
+                agl.emit_llm_response(response.content)
+        else:
+            response = self.llm.invoke(prompt)
+            
         return response.content
 
     def _is_selection_query(self, query: str) -> bool:

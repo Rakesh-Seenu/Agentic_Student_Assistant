@@ -12,6 +12,11 @@ from agentic_student_assistant.core.base.base_agent import BaseAgent
 from agentic_student_assistant.core.utils.config_loader import get_config
 from agentic_student_assistant.core.utils.prompt_loader import load_agent_prompts
 from agentic_student_assistant.talk2jobs.tools.google_search import GoogleSearch
+try:
+    import agentlightning as agl
+    AGL_AVAILABLE = True
+except ImportError:
+    AGL_AVAILABLE = False
 
 load_dotenv()
 
@@ -192,7 +197,16 @@ class JobMarketAgent(BaseAgent):
             return "⚠️ No job data to summarize."
         
         prompt = f"{self.analysis_prompt}\n\nHere are the listings:\n{json.dumps(job_listings, indent=2)}"
-        response = self.llm.invoke(prompt)
+        
+        # Agent Lightning Instrumentation
+        if AGL_AVAILABLE:
+            with agl.trace(name="job_market_summarize", agent_name="job_agent") as trace:
+                agl.emit_prompt(prompt, tags=["jobs", "analysis"])
+                response = self.llm.invoke(prompt)
+                agl.emit_llm_response(response.content)
+        else:
+            response = self.llm.invoke(prompt)
+
         return response.content
     
     def _extract_field_from_query(self, query: str) -> str:

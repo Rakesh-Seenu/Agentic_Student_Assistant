@@ -18,7 +18,7 @@ from agentic_student_assistant.core.utils.llm_factory import LLMFactory
 class RouteDecision(BaseModel):
     """Structured output for routing decisions."""
     
-    agent: Literal["job_market", "books", "papers", "orchestrator", "fallback"] = Field(
+    agent: Literal["job_market", "books", "papers", "documents", "orchestrator", "fallback"] = Field(
         description="The agent that should handle this query"
     )
     confidence: float = Field(

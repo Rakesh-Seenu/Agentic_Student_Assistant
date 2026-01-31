@@ -3,12 +3,13 @@ FastAPI backend for Agentic Student Assistant.
 Production-ready API with health checks, chat endpoints, and cache management.
 """
 import time
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from fastapi import File, UploadFile, Form
 import sys
 from pathlib import Path
 
@@ -65,6 +66,43 @@ class BookRequest(BaseModel):
     """Request model for book recommendations."""
     query: str = Field(..., description="Book topic or genre query")
     use_cache: bool = Field(default=True, description="Whether to use caching")
+
+class DocumentUploadResponse(BaseModel):
+    """Response model for document upload."""
+    document_id: str
+    filename: str
+    chunk_count: int
+    message: str
+
+class DocumentQueryRequest(BaseModel):
+    """Request model for document Q&A."""
+    query: str = Field(..., description="Question about uploaded documents")
+    document_id: Optional[str] = Field(default=None, description="Specific document ID to query")
+    use_cache: bool = Field(default=True, description="Whether to use caching")
+
+class DocumentListResponse(BaseModel):
+    """Response model for listing documents."""
+    documents: List[dict]
+
+class FeedbackRequest(BaseModel):
+    """Request model for user feedback."""
+    query: str = Field(..., description="User's query")
+    response: str = Field(..., description="Agent's response")
+    agent: str = Field(..., description="Agent that handled the query")
+    rating: int = Field(..., description="1 for positive, -1 for negative")
+    session_id: str = Field(..., description="User session ID")
+    latency: Optional[float] = Field(default=None, description="Response latency")
+    confidence: Optional[float] = Field(default=None, description="Router confidence")
+    comment: Optional[str] = Field(default=None, description="Optional user comment")
+
+class FeedbackResponse(BaseModel):
+    """Response model for feedback submission."""
+    message: str
+    feedback_id: str
+
+class FeedbackStatsResponse(BaseModel):
+    """Response model for feedback statistics."""
+    stats: Dict[str, Dict]
 
 
 # --- Lifespan ---
@@ -322,6 +360,207 @@ async def recommend_books(request: BookRequest):
             latency=latency,
             reasoning=reasoning
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# --- Document Endpoints ---
+
+@app.post("/api/upload-document", response_model=DocumentUploadResponse, tags=["Documents"])
+async def upload_document(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None)
+):
+    """
+    Upload a document (PDF or TXT) for Q&A.
+    """
+    from agentic_student_assistant.talk2docs.tools.document_processor import DocumentProcessor
+    from agentic_student_assistant.talk2docs.tools.qdrant_store import QdrantDocumentStore
+    
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Process document
+        processor = DocumentProcessor()
+        processed = processor.process_upload(
+            file_content=file_content,
+            filename=file.filename,
+            title=title
+        )
+        
+        # Upload to Qdrant
+        vector_store = QdrantDocumentStore()
+        chunk_count = vector_store.upload_document(
+            document_id=processed["document_id"],
+            chunks=processed["chunks"],
+            metadata=processed["metadata"]
+        )
+        
+        return DocumentUploadResponse(
+            document_id=processed["document_id"],
+            filename=file.filename,
+            chunk_count=chunk_count,
+            message=f"Successfully uploaded {file.filename} with {chunk_count} chunks"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/api/query-document", response_model=ChatResponse, tags=["Documents"])
+async def query_document(request: DocumentQueryRequest):
+    """
+    Ask questions about uploaded documents.
+    """
+    from agentic_student_assistant.talk2docs.agents.docs_agent import DocsRecommendAgent
+    
+    cache = app.state.cache
+    
+    # Check cache first
+    if request.use_cache:
+        cached_result = cache.get(request.query)
+        if cached_result:
+            return ChatResponse(
+                answer=cached_result,
+                agent="cached",
+                confidence=1.0,
+                latency=0.01,
+                reasoning="Retrieved from semantic cache"
+            )
+    
+    start_time = time.time()
+    try:
+        agent = DocsRecommendAgent()
+        answer = agent.process(
+            query=request.query,
+            document_id=request.document_id
+        )
+        
+        latency = time.time() - start_time
+        
+        # Store in cache
+        if request.use_cache:
+            cache.set(request.query, answer, agent="documents")
+        
+        return ChatResponse(
+            answer=answer,
+            agent="documents",
+            confidence=1.0,
+            latency=latency,
+            reasoning="Document Q&A"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/list-documents", response_model=DocumentListResponse, tags=["Documents"])
+async def list_documents():
+    """
+    List all uploaded documents.
+    """
+    from agentic_student_assistant.talk2docs.tools.qdrant_store import QdrantDocumentStore
+    
+    try:
+        vector_store = QdrantDocumentStore()
+        documents = vector_store.list_documents()
+        return DocumentListResponse(documents=documents)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/api/delete-document/{document_id}", tags=["Documents"])
+async def delete_document(document_id: str):
+    """
+    Delete an uploaded document.
+    """
+    from agentic_student_assistant.talk2docs.tools.qdrant_store import QdrantDocumentStore
+    from agentic_student_assistant.talk2docs.tools.document_processor import DocumentProcessor
+    
+    try:
+        vector_store = QdrantDocumentStore()
+        vector_store.delete_document(document_id)
+        
+        # Also delete the file from disk
+        processor = DocumentProcessor()
+        # Note: We'd need to store file_path in metadata to delete from disk
+        # For now, just delete from Qdrant
+        
+        return {"message": f"Successfully deleted document {document_id}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# --- Feedback Endpoints ---
+
+@app.post("/api/feedback", response_model=FeedbackResponse, tags=["Feedback"])
+async def submit_feedback(request: FeedbackRequest):
+    """
+    Submit user feedback (thumbs up/down) for an agent response.
+    Also emits reward to Agent Lightning.
+    """
+    from agentic_student_assistant.core.utils.feedback_store import get_feedback_store
+    
+    try:
+        import agentlightning as agl
+        AGL_AVAILABLE = True
+    except ImportError:
+        AGL_AVAILABLE = False
+    
+    try:
+        # Validate rating
+        if request.rating not in [1, -1]:
+            raise HTTPException(status_code=400, detail="Rating must be 1 or -1")
+        
+        # 1. Store in Redis (for analytics)
+        feedback_store = get_feedback_store()
+        feedback_id = feedback_store.add_feedback(
+            query=request.query,
+            response=request.response,
+            agent=request.agent,
+            rating=request.rating,
+            session_id=request.session_id,
+            latency=request.latency,
+            confidence=request.confidence,
+            comment=request.comment
+        )
+        
+        # 2. Emit Reward to Agent Lightning (for RL training)
+        if AGL_AVAILABLE:
+            try:
+                agl.emit_reward(
+                    value=float(request.rating),  # 1.0 or -1.0
+                    agent_name=request.agent,
+                    meta={
+                        "query": request.query,
+                        "session_id": request.session_id,
+                        "feedback_id": feedback_id
+                    }
+                )
+                print(f"⚡ [AGL] Emitted reward {request.rating} for agent {request.agent}")
+            except Exception as e:
+                print(f"⚠️ [AGL] Failed to emit reward: {e}")
+        
+        return FeedbackResponse(
+            message="Feedback recorded successfully",
+            feedback_id=feedback_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/feedback/stats", response_model=FeedbackStatsResponse, tags=["Feedback"])
+async def get_feedback_stats():
+    """
+    Get feedback statistics for all agents.
+    """
+    from agentic_student_assistant.core.utils.feedback_store import get_feedback_store
+    
+    try:
+        feedback_store = get_feedback_store()
+        stats = feedback_store.get_stats()
+        return FeedbackStatsResponse(stats=stats)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 

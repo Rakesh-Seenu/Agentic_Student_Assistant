@@ -5,6 +5,7 @@ router_system: |
   - job_market: Job search, career opportunities, hiring trends, job listings
   - books: Book recommendations, textbooks, general learning resources, reading materials
   - papers: Scientific research papers, academic articles, citations, primary sources (Semantic Scholar/CORE/ArXiv)
+  - documents: User-uploaded documents, personal PDFs, document Q&A, "my document", "uploaded file"
   - fallback: General greetings or out-of-scope questions (e.g. weather, sports, general knowledge). ALWAYS route non-university/non-career questions here.
 
   Analyze the query semantically and decide which agent should handle it.
