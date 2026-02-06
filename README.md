@@ -13,7 +13,6 @@ The system routes your query to the most relevant specialist agent:
 *   **Talk2Papers**: Searches academic databases (ArXiv, Semantic Scholar, CORE) for research papers and provides summaries.
 *   **Talk2Books**: Recommends books based on your interests using Open Library and Google Books.
 *   **Talk2Docs**: Allows you to upload your own PDF or TXT files and ask questions about them.
-*   **Talk2Events** *(In Development)*: Will provide meetup and event recommendations.
 
 ## 🚀 Quick Start
 
